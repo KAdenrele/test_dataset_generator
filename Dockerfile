@@ -15,4 +15,4 @@ COPY . .
 
 VOLUME /data
 
-CMD ["python", "main.py"]
+#CMD ["python", "main.py"]
