@@ -1,7 +1,10 @@
-FROM ghcr.io/astral-sh/uv:latest AS uv_bin
-
 FROM python:3.11-slim
+FROM ghcr.io/astral-sh/uv:latest AS uv_bin
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=uv_bin /uv /uvx /bin/
 
