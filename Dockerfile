@@ -9,7 +9,8 @@ COPY pyproject.toml uv.lock ./
 
 # --frozen: ensures uv doesn't try to update the lockfile
 # --no-cache: keeps the image size small
-RUN uv sync --frozen --no-cache --system
+RUN uv sync --frozen --no-cache
+ENV PATH="/app/.venv/bin:$PATH"
 
 COPY . .
 

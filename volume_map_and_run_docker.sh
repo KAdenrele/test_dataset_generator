@@ -9,9 +9,9 @@ echo "Image built successfully."
 echo "Running container to download, extract, and process datasets."
 echo "Output will be mapped to /mnt/data on the host machine."
 
-# The commands are passed to `bash -c` to be executed sequentially inside the container.
-# The `&&` ensures that the next command only runs if the previous one was successful.
-# All output written to /data inside the container will be saved to /mnt/data on the host.
+#commands are passed to `bash -c` to be executed sequentially inside the container.
+#output written to /data inside the container will be saved to /mnt/data in the instance
+
 docker run --rm -it -v /mnt/data:/data test-data-app bash -c '
   set -e
   K400_EXTRACT_DIR="/data/raw/k400/val"
