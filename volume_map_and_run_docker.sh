@@ -19,6 +19,7 @@ docker run --rm -it -v /mnt/data:/data test-data-app bash -c '
   echo "Checking for existing Kinetics-400 data..."
   if [ ! -d "$K400_EXTRACT_DIR" ] || [ -z "$(ls -A "$K400_EXTRACT_DIR")" ]; then
     echo "Kinetics-400 data not found or is empty. Starting download and extraction..."
+    chmod +x ./bash_scripts/k400_download.sh ./bash_scripts/k400_extraction.sh
     ./bash_scripts/k400_download.sh && ./bash_scripts/k400_extraction.sh
   else
     echo "Kinetics-400 data already exists. Skipping download and extraction."
