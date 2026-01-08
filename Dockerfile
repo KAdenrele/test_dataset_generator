@@ -1,18 +1,17 @@
+FROM ghcr.io/astral-sh/uv:latest AS uv_bin
+
 FROM python:3.11-slim
 WORKDIR /app
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends wget && \
-    pip install uv && \
-    rm -rf /var/lib/apt/lists/*
+COPY --from=uv_bin /uv /uvx /bin/
 
+COPY pyproject.toml uv.lock ./
 
-COPY uv.lock .
-
-RUN uv pip sync --lockfile uv.lock
+# --frozen: ensures uv doesn't try to update the lockfile
+# --no-cache: keeps the image size small
+RUN uv sync --frozen --no-cache --system
 
 COPY . .
 
 VOLUME /data
-
 CMD ["python", "main.py"]
