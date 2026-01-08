@@ -1,11 +1,11 @@
 import os
 from datasets import load_dataset
-# coco_dir = os.path.join(os.path.curdir, "authentic/images/COCO")
+coco_dir = "/data/raw/coco_images_authentic"
 # ulta_video__dir = os.path.join(os.path.curdir, "authentic/videos/ultra_video")
 
 #ultra_video_dataset = load_dataset("APRIL-AIGC/UltraVideo")
 #clip_kinetics_700_dataset = load_dataset("iejMac/CLIP-Kinetics700")
-coco_dataset = load_dataset("detection-datasets/coco")
+coco_dataset = load_dataset("detection-datasets/coco", cache_dir=coco_dir)
 
 def preprocess_function(examples):
     #no preprocessing for now, just return the media. 

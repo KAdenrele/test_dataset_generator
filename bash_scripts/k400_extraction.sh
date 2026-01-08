@@ -1,8 +1,8 @@
 #!/bin/bash
 #source = https://github.com/cvdfoundation/kinetics-dataset/blob/main/k400_extractor.sh
 # Download directories vars
-root_dl="k400"
-root_dl_targz="k400_targz"
+root_dl="/data/raw/k400"
+root_dl_targz="/data/raw/k400_targz"
 
 # Make root directories
 [ ! -d $root_dl ] && mkdir $root_dl

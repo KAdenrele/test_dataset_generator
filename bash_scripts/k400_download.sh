@@ -1,8 +1,8 @@
 #!/bin/bash
 # source = https://github.com/cvdfoundation/kinetics-dataset/tree/main?tab=readme-ov-file
 # Download directories vars
-root_dl="k400"
-root_dl_targz="k400_targz"
+root_dl="/data/raw/k400"
+root_dl_targz="/data/raw/k400_targz"
 
 # Make root directories
 [ ! -d $root_dl ] && mkdir $root_dl
@@ -24,7 +24,10 @@ wget -c $url -P $curr_dl
 
 # Download annotations csv files
 curr_dl=${root_dl}/annotations
+
+url_tr=https://s3.amazonaws.com/kinetics/400/annotations/train.csv
 url_v=https://s3.amazonaws.com/kinetics/400/annotations/val.csv
+url_t=https://s3.amazonaws.com/kinetics/400/annotations/test.csv
 [ ! -d $curr_dl ] && mkdir -p $curr_dl
 wget -c $url_tr -P $curr_dl
 wget -c $url_v -P $curr_dl
