@@ -5,6 +5,6 @@ docker run --rm -it \
   test-data-app
 
 
-./bash_scripts/k400_download.sh
-./bash_scripts/k400_extraction.sh
-python main.py
+# ./bash_scripts/k400_download.sh
+# ./bash_scripts/k400_extraction.sh
+# python main.py
