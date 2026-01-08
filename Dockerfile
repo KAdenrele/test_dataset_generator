@@ -15,5 +15,4 @@ COPY . .
 
 VOLUME /data
 
-# Specify the command to run on container startup
 CMD ["python", "main.py"]
