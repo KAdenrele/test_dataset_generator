@@ -8,7 +8,7 @@ from datasets import load_dataset
 from scripts.media_processes import SocialMediaSimulator
 
 random.seed(42)  
-BASE_DIR = "./data"
+BASE_DIR = "/data"
 
 DATASET_DIRS = {
     "SAFE": os.path.join(BASE_DIR, "SAFEDataset/data"),
@@ -114,17 +114,6 @@ def get_standard_paths(directory):
 
 # --- Helper Functions for Processing ---
 
-def initialize_metadata(csv_path):
-    """Ensures the metadata CSV exists and has a header."""
-    file_exists = os.path.isfile(csv_path)
-    if not file_exists:
-        with open(csv_path, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                'original_path', 'original_filename', 'media_type', 'authenticity',
-                'source_model', 'simulation', 'processed_filename', 'processed_path'
-            ])
-
 def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv_writer):
     """Runs all social media simulations for a single image and logs results."""
     try:
@@ -193,7 +182,7 @@ def run_pipeline(dataset_name, target_sample_size=2000):
     else:
         # Standard local file search
         if dataset_name == "SAFE":
-            all_files = get_safe_dataset_paths(directory, target_sample_size)
+            all_files = get_non_huggingface_dataset_paths(directory, target_sample_size)
         else:
             all_files = get_standard_paths(directory)
 
@@ -202,13 +191,17 @@ def run_pipeline(dataset_name, target_sample_size=2000):
         return
 
     # 3. Setup
-    metadata_path = os.path.join(CURATED_DIR, "metadata.csv")
-    initialize_metadata(metadata_path)
+    metadata_path = os.path.join(CURATED_DIR, f"{dataset_name}_metadata.csv")
     simulator = SocialMediaSimulator(base_output_dir=CURATED_DIR)
 
     # 4. Processing Loop
-    with open(metadata_path, 'a', newline='') as csv_file:
+    with open(metadata_path, 'w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
+        # Write header each time to ensure the file is self-contained and fresh.
+        csv_writer.writerow([
+            'original_path', 'original_filename', 'media_type', 'authenticity',
+            'source_model', 'simulation', 'processed_filename', 'processed_path'
+        ])
         
         for item in tqdm(all_files, desc=f"Curating {dataset_name}"):
             try:
