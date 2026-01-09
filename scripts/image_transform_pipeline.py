@@ -1,0 +1,241 @@
+import os
+import shutil
+from glob import glob
+from tqdm import tqdm
+import csv
+import random
+from datasets import load_dataset
+from scripts.media_processes import SocialMediaSimulator
+
+random.seed(42)  
+BASE_DIR = "./data"
+
+DATASET_DIRS = {
+    "SAFE": os.path.join(BASE_DIR, "SAFEDataset/data"),
+    "COCO": os.path.join(BASE_DIR, "raw/coco_images_authentic")
+}
+
+CURATED_DIR = os.path.join(BASE_DIR, "curated/images")
+os.makedirs(CURATED_DIR, exist_ok=True)
+
+IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.heic']
+
+
+image_storage_type_dict = {
+    "SAFE": {"type": "synthetic", "storage": "images", "hf_name": None},
+    "COCO": {"type": "authentic", "storage": "hugging_face_lock_file", "hf_name": "detection-datasets/coco"}
+}
+
+def get_media_info(file_path, dataset_name, base_dir):
+    """Extracts metadata from the file path and dataset info."""
+    media_type = "image"
+    authenticity = image_storage_type_dict.get(dataset_name, {}).get("type", "unknown")
+    original_filename = os.path.basename(file_path)
+
+    source_model = None
+    if dataset_name == "SAFE":
+        try:
+            relative_dir_path = os.path.relpath(os.path.dirname(file_path), base_dir)
+            # The model name is the first component of this relative path... he says... hopefully
+            source_model = relative_dir_path.split(os.sep)[0]
+        except ValueError:
+            source_model = "unknown" # Should not happen if paths are correct
+    
+    return media_type, authenticity, original_filename, source_model
+
+
+def get_hf_dataset_paths(hf_name, cache_dir, target_sample_size, split='val'):
+    """
+    Loads a HF dataset and generates synthetic file paths 
+    based on the split and index (e.g., 'val_102.jpg').
+    """
+    print(f"Loading Hugging Face dataset '{hf_name}'...")
+    try:
+        dataset = load_dataset(hf_name, cache_dir=cache_dir)
+        
+        if split not in dataset:
+            print(f"  [ERROR] Split '{split}' not found. Available: {list(dataset.keys())}")
+            return []
+
+        dataset_size = len(dataset[split])
+        print(f"  Found {dataset_size} items in '{split}' split.")
+
+        # 1. Determine which indices to use
+        if dataset_size > target_sample_size:
+            print(f"  Sampling {target_sample_size} indices...")
+            sampled_indices = random.sample(range(dataset_size), target_sample_size)
+        else:
+            print(f"  Using all {dataset_size} indices.")
+            sampled_indices = list(range(dataset_size))
+
+        synthetic_data = []
+        for idx in sampled_indices:
+            synthetic_path = f"{split}_{idx}.jpg"
+            synthetic_data.append((synthetic_path, idx))
+
+        return synthetic_data
+    
+    except Exception as e:
+        print(f"  [ERROR] Failed to generate paths: {e}")
+        return []
+    
+
+def get_non_huggingface_dataset_paths(directory, target_sample_size):
+    """Logic for the SAFE dataset folder structure. Others may be simiar. Will modify as needed."""
+    all_files = []
+    model_dirs = [d.path for d in os.scandir(directory) if d.is_dir()]
+    if not model_dirs:
+        return []
+
+    num_models = len(model_dirs)
+    samples_per_model = target_sample_size // num_models
+    remainder = target_sample_size % num_models
+
+    for i, model_dir in enumerate(sorted(model_dirs)):
+        model_image_files = []
+        for ext in IMAGE_EXTENSIONS:
+            model_image_files.extend(glob(os.path.join(model_dir, '**', f'*{ext}'), recursive=True))
+
+        num_to_sample = samples_per_model + (1 if i < remainder else 0)
+        if len(model_image_files) < num_to_sample:
+            all_files.extend(model_image_files)
+        else:
+            all_files.append(random.sample(model_image_files, num_to_sample))
+    
+    # Flatten list if nested
+    return [item for sublist in all_files for item in (sublist if isinstance(sublist, list) else [sublist])]
+
+def get_standard_paths(directory):
+    """Standard recursive glob search for image files."""
+    files = []
+    for ext in IMAGE_EXTENSIONS:
+        files.extend(glob(os.path.join(directory, '**', f'*{ext}'), recursive=True))
+    return files
+
+# --- Helper Functions for Processing ---
+
+def initialize_metadata(csv_path):
+    """Ensures the metadata CSV exists and has a header."""
+    file_exists = os.path.isfile(csv_path)
+    if not file_exists:
+        with open(csv_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                'original_path', 'original_filename', 'media_type', 'authenticity',
+                'source_model', 'simulation', 'processed_filename', 'processed_path'
+            ])
+
+def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv_writer):
+    """Runs all social media simulations for a single image and logs results."""
+    try:
+        media_info = get_media_info(file_path, dataset_name, directory)
+        media_type, authenticity, original_filename, source_model = media_info
+        
+        simulations = {
+            "facebook": lambda: simulator.facebook(file_path),
+            "instagram_feed": lambda: simulator.instagram(file_path, post_type='feed'),
+            "tiktok": lambda: simulator.tiktok(file_path),
+            "whatsapp_standard": lambda: simulator.whatsapp(file_path, quality_mode='standard'),
+            "signal_standard": lambda: simulator.signal(file_path, quality_setting='standard'),
+            "telegram": lambda: simulator.telegram(file_path),
+        }
+
+        for sim_name, sim_func in simulations.items():
+            try:
+                sim_func() 
+                platform_dir_name = sim_name.split('_')[0]
+                output_dir = os.path.join(CURATED_DIR, platform_dir_name)
+                
+                # Setup paths
+                processed_ext = ".jpg"
+                temp_output_path = os.path.join(output_dir, f"TEMPOUT{processed_ext}")
+
+                if os.path.exists(temp_output_path):
+                    new_filename = f"{os.path.splitext(original_filename)[0]}_{sim_name}{processed_ext}"
+                    new_filepath = os.path.join(output_dir, new_filename)
+                    
+                    shutil.move(temp_output_path, new_filepath)
+                    csv_writer.writerow([
+                        file_path, original_filename, media_type, authenticity, 
+                        source_model, sim_name, new_filename, new_filepath
+                    ])
+            except Exception as e:
+                print(f"  [ERROR] Simulation '{sim_name}' failed for {original_filename}: {e}")
+
+    except Exception as e:
+        print(f"  [ERROR] Metadata extraction failed for {os.path.basename(file_path)}: {e}")
+
+
+
+
+def run_pipeline(dataset_name, target_sample_size=2000):
+    print(f"--- Starting Image Curation Pipeline for {dataset_name} ---")
+
+    # 1. Config Retrieval
+    directory = DATASET_DIRS.get(dataset_name)
+    storage_info = image_storage_type_dict.get(dataset_name, {})
+    storage_type = storage_info.get("storage")
+    
+    if not directory:
+        print(f"Error: Dataset '{dataset_name}' not found.")
+        return
+
+    # 2. Path/Data Discovery
+    dataset_obj = None  # To keep HF dataset in memory if needed
+    
+    if storage_type == "hugging_face_lock_file":
+        hf_name = storage_info.get("hf_name")
+        # Now returns a list of (synthetic_name, index)
+        all_files = get_hf_dataset_paths(hf_name, directory, target_sample_size)
+        # We need the actual dataset object to pull the images in the loop
+        from datasets import load_dataset
+        dataset_obj = load_dataset(hf_name, cache_dir=directory)
+    else:
+        # Standard local file search
+        if dataset_name == "SAFE":
+            all_files = get_safe_dataset_paths(directory, target_sample_size)
+        else:
+            all_files = get_standard_paths(directory)
+
+    if not all_files:
+        print(f"No files found for {dataset_name}. Exiting.")
+        return
+
+    # 3. Setup
+    metadata_path = os.path.join(CURATED_DIR, "metadata.csv")
+    initialize_metadata(metadata_path)
+    simulator = SocialMediaSimulator(base_output_dir=CURATED_DIR)
+
+    # 4. Processing Loop
+    with open(metadata_path, 'a', newline='') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        
+        for item in tqdm(all_files, desc=f"Curating {dataset_name}"):
+            try:
+                if storage_type == "hugging_face_lock_file":
+                    # --- HANDLING HUGGING FACE (In-Memory) ---
+                    synthetic_name, idx = item
+                    split = synthetic_name.split('_')[0] # Get 'val' from 'val_102.jpg'
+                    
+                    # Access the PIL image
+                    pil_img = dataset_obj[split][idx]['image']
+                    
+                    # Create a temporary local file so the simulator can read it
+                    temp_path = os.path.join(directory, f"TEMP_INPUT_{synthetic_name}")
+                    pil_img.convert("RGB").save(temp_path) # Convert to RGB to ensure JPEG compatibility
+                    
+                    run_simulations_for_image(temp_path, dataset_name, directory, simulator, csv_writer)
+                    
+                    # Cleanup the temp file
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                
+                else:
+                    # --- HANDLING LOCAL STORAGE ---
+                    # item is a direct file_path (string)
+                    run_simulations_for_image(item, dataset_name, directory, simulator, csv_writer)
+
+            except Exception as e:
+                print(f"  [CRITICAL ERROR] Failed to process {item}: {e}")
+
+    print(f"--- {dataset_name} Curation Finished ---")

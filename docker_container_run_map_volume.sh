@@ -1,17 +1,11 @@
 #!/bin/bash
 # Exit immediately if a command exits with a non-zero status.
 set -e
-
-echo "Building the Docker image..."
-docker build -t test-data-app -f Dockerfile .
-#docker buildx build --tag test-data-app --file Dockerfile --load .
-
-echo "Image built successfully."
 echo "Running container to download, extract, and process datasets."
 echo "Output will be mapped to /mnt/data on the host machine."
 
 #commands are passed to `bash -c` to be executed sequentially inside the container.
-#output written to /data inside the container will be saved to /mnt/data in the instance
+#output written to /data inside the container will be saved to /mnt/data in the instance due to volume mapping.
 
 docker run --rm -it -v /mnt/data:/data test-data-app bash -c '
   set -e

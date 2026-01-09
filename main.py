@@ -1,16 +1,17 @@
 import os
 from datasets import load_dataset
-coco_dir = "/data/raw/coco_images_authentic"
-# ulta_video__dir = os.path.join(os.path.curdir, "authentic/videos/ultra_video")
+from scripts.image_transform_pipeline import run_pipeline
 
-#ultra_video_dataset = load_dataset("APRIL-AIGC/UltraVideo")
-#clip_kinetics_700_dataset = load_dataset("iejMac/CLIP-Kinetics700")
-coco_dataset = load_dataset("detection-datasets/coco", cache_dir=coco_dir)
+BASE_DOWNLOAD_DIR = "/data/raw"
+COCO_DIR = f"{BASE_DOWNLOAD_DIR}/coco_images_authentic"
+MAVOS_DIR = f"{BASE_DOWNLOAD_DIR}/mavos_videos_synthetic"
 
-def preprocess_function(examples):
-    #no preprocessing for now, just return the media. 
-    return examples
 
-coco_processed_dataset = coco_dataset.map(preprocess_function,batched=True, num_proc=os.cpu_count(),desc="Resizing images", load_from_cache_file=True)
-#ultra_video_processed_dataset = ultra_video_dataset.map(preprocess_function,batched=True, num_proc=os.cpu_count(),desc="Resizing images", load_from_cache_file=True)
-#clip_kinetics_700_processed_dataset = clip_kinetics_700_dataset.map(preprocess_function,batched=True, num_proc=os.cpu_count(),desc="Resizing images", load_from_cache_file=True)
+if __name__ == "__main__":
+    coco_dataset = load_dataset("detection-datasets/coco", cache_dir=COCO_DIR, num_proc=os.cpu_count())
+    #mavos_dataset = load_dataset("unibuc-cs/MAVOS-DD", cache_dir=MAVOS_DIR, num_proc=os.cpu_count())
+
+    #run_pipeline("SAFE", target_sample_size=2000)
+    run_pipeline("COCO", target_sample_size=2000)
+
+    print("--- Main process complete. All datasets downloaded and curated. ---")
