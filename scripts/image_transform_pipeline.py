@@ -44,33 +44,60 @@ def get_media_info(file_path, dataset_name, base_dir):
     return media_type, authenticity, original_filename, source_model
 
 def get_hf_dataset_paths(hf_name, cache_dir, target_sample_size, split='val', image_class="person"):
+    """
+    Loads a HF dataset, finds original indices for a specific class, samples them,
+    and returns a list of (synthetic_path, original_index) tuples.
+    """
+    print(f"Loading and processing Hugging Face dataset '{hf_name}'...")
     try:
+        # Load the dataset dictionary
         dataset_dict = load_dataset(hf_name, cache_dir=cache_dir)
-        ds = dataset_dict[split]
-
-        if image_class:
-            try:
-                category_feature = ds.features["objects"]["category"]
-                
-                if isinstance(category_feature, list):
-                    category_feature = category_feature[0]
-                
-                target_id = category_feature.str2int(image_class)
-                ds = ds.filter(lambda x: target_id in x["objects"]["category"])
-            except Exception:
-                pass
-
-        dataset_size = len(ds)
-        if dataset_size == 0:
+        if split not in dataset_dict:
+            print(f"  [ERROR] Split '{split}' not found. Available: {list(dataset_dict.keys())}")
             return []
-
-        if dataset_size > target_sample_size:
-            indices = random.sample(range(dataset_size), target_sample_size)
-            ds = ds.select(indices)
         
-        return [(f"{split}_{i}.jpg", i) for i in range(len(ds))]
+        ds = dataset_dict[split]
+        print(f"  Original size of '{split}' split: {len(ds)} images.")
 
-    except Exception:
+        valid_indices = []
+        if image_class:
+            print(f"  Filtering for class: '{image_class}'...")
+            try:
+                # Correctly access the ClassLabel feature to get the integer ID for the class
+                category_feature = ds.features["objects"]["category"].feature
+                target_id = category_feature.str2int(image_class)
+
+                # Efficiently iterate over just the category column to find matching indices
+                print("  Scanning for matching images (this may take a moment)...")
+                for i, categories in enumerate(tqdm(ds['objects']['category'], desc="Filtering")):
+                    if target_id in categories:
+                        valid_indices.append(i)
+                print(f"  Found {len(valid_indices)} images containing '{image_class}'.")
+
+            except (KeyError, AttributeError, ValueError) as e:
+                print(f"  [WARNING] Could not filter by class '{image_class}'. The dataset might not have the expected structure or class. Error: {e}")
+            except Exception as e:
+                print(f"  [WARNING] An unexpected error occurred during filtering: {e}")
+
+        # If filtering was skipped, failed, or found nothing, use all original indices
+        if not valid_indices:
+            print("  No valid images found after filtering, or filtering was skipped. Using all images.")
+            valid_indices = list(range(len(ds)))
+
+        # Sample from the list of valid original indices
+        if len(valid_indices) > target_sample_size:
+            print(f"  Sampling {target_sample_size} from {len(valid_indices)} valid images...")
+            sampled_indices = random.sample(valid_indices, target_sample_size)
+        else:
+            print(f"  Using all {len(valid_indices)} valid images.")
+            sampled_indices = valid_indices
+        
+        # Return list of (synthetic_name, original_index)
+        print(f"  Returning {len(sampled_indices)} indices for processing.")
+        return [(f"{split}_{idx}.jpg", idx) for idx in sampled_indices]
+
+    except Exception as e:
+        print(f"  [CRITICAL ERROR] Failed to load or process dataset '{hf_name}'. Reason: {e}")
         return []
     
 
@@ -110,7 +137,6 @@ def get_standard_paths(directory):
         files.extend(glob(os.path.join(directory, '**', f'*{ext}'), recursive=True))
     return files
 
-# --- Helper Functions for Processing ---
 
 def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv_writer):
     """Runs all social media simulations for a single image and logs results."""
