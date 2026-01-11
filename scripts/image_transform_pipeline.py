@@ -43,67 +43,80 @@ def get_media_info(file_path, dataset_name, base_dir):
     
     return media_type, authenticity, original_filename, source_model
 
-
-def get_hf_dataset_paths(hf_name, cache_dir, target_sample_size, split='val'):
-    """
-    Loads a HF dataset and generates synthetic file paths 
-    based on the split and index (e.g., 'val_102.jpg').
-    """
+def get_hf_dataset_paths(hf_name, cache_dir, target_sample_size, split='val', image_class="person"):
     print(f"Loading Hugging Face dataset '{hf_name}'...")
     try:
-        dataset = load_dataset(hf_name, cache_dir=cache_dir)
+        dataset_dict = load_dataset(hf_name, cache_dir=cache_dir)
         
-        if split not in dataset:
-            print(f"  [ERROR] Split '{split}' not found. Available: {list(dataset.keys())}")
+        if split not in dataset_dict:
+            print(f"  [ERROR] Split '{split}' not found.")
+            return []
+        
+        ds = dataset_dict[split]
+
+        if image_class:
+            print(f"  Filtering for class: '{image_class}'...")
+            try:
+                #map string "person" to its integer ID (usually 0)
+                category_feature = ds.features["objects"].feature["category"]
+                target_id = category_feature.str2int(image_class)
+                
+                #keep images where the target_id is in the list of categories
+                ds = ds.filter(lambda x: target_id in x["objects"]["category"])
+                print(f"  Filter complete. Found {len(ds)} images containing '{image_class}'.")
+            except Exception as e:
+                print(f"  [WARNING] Filtering failed: {e}. using full dataset.")
+
+        #sample from the FILTERED dataset
+        dataset_size = len(ds)
+        if dataset_size == 0:
+            print("  [ERROR] No images found after filtering.")
             return []
 
-        dataset_size = len(dataset[split])
-        print(f"  Found {dataset_size} items in '{split}' split.")
-
-        # 1. Determine which indices to use
         if dataset_size > target_sample_size:
-            print(f"  Sampling {target_sample_size} indices...")
-            sampled_indices = random.sample(range(dataset_size), target_sample_size)
-        else:
-            print(f"  Using all {dataset_size} indices.")
-            sampled_indices = list(range(dataset_size))
+            print(f"  Sampling {target_sample_size} items from filtered results...")
+            # We use .select() with random indices to get a new Dataset object
+            indices = random.sample(range(dataset_size), target_sample_size)
+            ds = ds.select(indices)
+        
+        #generate synthetic paths based on the final selection
 
-        synthetic_data = []
-        for idx in sampled_indices:
-            synthetic_path = f"{split}_{idx}.jpg"
-            synthetic_data.append((synthetic_path, idx))
-
+        synthetic_data = [(f"{split}_{i}.jpg", i) for i in range(len(ds))]
         return synthetic_data
-    
+
     except Exception as e:
-        print(f"  [ERROR] Failed to generate paths: {e}")
+        print(f"  [CRITICAL ERROR] Failed to load dataset: {e}")
         return []
     
 
 def get_non_huggingface_dataset_paths(directory, target_sample_size):
-    """Logic for the SAFE dataset folder structure. Others may be simiar. Will modify as needed."""
+    """
+    Logic for the SAFE dataset folder structure. 
+    Samples a specific number of images from each subdirectory (model).
+    """
     all_files = []
     model_dirs = [d.path for d in os.scandir(directory) if d.is_dir()]
     if not model_dirs:
+        print(f"  [WARNING] No model subdirectories found in {directory}")
         return []
 
-    num_models = len(model_dirs)
-    samples_per_model = target_sample_size // num_models
-    remainder = target_sample_size % num_models
+    print(f"  Found {len(model_dirs)} model directories. Attempting to sample {target_sample_size} images from each.")
 
-    for i, model_dir in enumerate(sorted(model_dirs)):
+    for model_dir in sorted(model_dirs):
         model_image_files = []
         for ext in IMAGE_EXTENSIONS:
             model_image_files.extend(glob(os.path.join(model_dir, '**', f'*{ext}'), recursive=True))
 
-        num_to_sample = samples_per_model + (1 if i < remainder else 0)
-        if len(model_image_files) < num_to_sample:
+        if not model_image_files:
+            print(f"    - No images found in {os.path.basename(model_dir)}")
+            continue
+        if len(model_image_files) < target_sample_size:
+            print(f"    - Found {len(model_image_files)} images in {os.path.basename(model_dir)} (less than target). Taking all.")
             all_files.extend(model_image_files)
         else:
-            all_files.append(random.sample(model_image_files, num_to_sample))
-    
-    # Flatten list if nested
-    return [item for sublist in all_files for item in (sublist if isinstance(sublist, list) else [sublist])]
+            print(f"    - Sampling {target_sample_size} images from {os.path.basename(model_dir)}.")
+            all_files.extend(random.sample(model_image_files, target_sample_size))
+    return all_files
 
 def get_standard_paths(directory):
     """Standard recursive glob search for image files."""
