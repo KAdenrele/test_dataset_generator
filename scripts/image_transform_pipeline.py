@@ -44,48 +44,33 @@ def get_media_info(file_path, dataset_name, base_dir):
     return media_type, authenticity, original_filename, source_model
 
 def get_hf_dataset_paths(hf_name, cache_dir, target_sample_size, split='val', image_class="person"):
-    print(f"Loading Hugging Face dataset '{hf_name}'...")
     try:
         dataset_dict = load_dataset(hf_name, cache_dir=cache_dir)
-        
-        if split not in dataset_dict:
-            print(f"  [ERROR] Split '{split}' not found.")
-            return []
-        
         ds = dataset_dict[split]
 
         if image_class:
-            print(f"  Filtering for class: '{image_class}'...")
             try:
-                #map string "person" to its integer ID (usually 0)
-                category_feature = ds.features["objects"].feature["category"]
-                target_id = category_feature.str2int(image_class)
+                category_feature = ds.features["objects"]["category"]
                 
-                #keep images where the target_id is in the list of categories
+                if isinstance(category_feature, list):
+                    category_feature = category_feature[0]
+                
+                target_id = category_feature.str2int(image_class)
                 ds = ds.filter(lambda x: target_id in x["objects"]["category"])
-                print(f"  Filter complete. Found {len(ds)} images containing '{image_class}'.")
-            except Exception as e:
-                print(f"  [WARNING] Filtering failed: {e}. using full dataset.")
+            except Exception:
+                pass
 
-        #sample from the FILTERED dataset
         dataset_size = len(ds)
         if dataset_size == 0:
-            print("  [ERROR] No images found after filtering.")
             return []
 
         if dataset_size > target_sample_size:
-            print(f"  Sampling {target_sample_size} items from filtered results...")
-            # We use .select() with random indices to get a new Dataset object
             indices = random.sample(range(dataset_size), target_sample_size)
             ds = ds.select(indices)
         
-        #generate synthetic paths based on the final selection
+        return [(f"{split}_{i}.jpg", i) for i in range(len(ds))]
 
-        synthetic_data = [(f"{split}_{i}.jpg", i) for i in range(len(ds))]
-        return synthetic_data
-
-    except Exception as e:
-        print(f"  [CRITICAL ERROR] Failed to load dataset: {e}")
+    except Exception:
         return []
     
 
