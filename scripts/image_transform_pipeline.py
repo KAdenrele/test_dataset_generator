@@ -8,10 +8,11 @@ from datasets import load_dataset
 from scripts.media_processes import SocialMediaSimulator
 
 random.seed(42)  
-BASE_DIR = "/data"
+BASE_DIR = "./data"
 
 DATASET_DIRS = {
-    "SAFE": os.path.join(BASE_DIR, "SAFEDataset/data"),
+    "SAFE": os.path.join(BASE_DIR, "raw/safe_images_synthetic"),
+    #"SAFE": os.path.join(BASE_DIR, "SAFEDataset/data"),
     "COCO": os.path.join(BASE_DIR, "raw/coco_images_authentic")
 }
 
@@ -154,6 +155,16 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv
         media_info = get_media_info(file_path, dataset_name, directory)
         media_type, authenticity, original_filename, source_model = media_info
 
+        # Create a unique base filename from the relative path to prevent overwrites.
+        # This is crucial for datasets that have identical filenames in different subdirectories.
+        try:
+            # e.g., 'model_A/subdir/image.png' -> 'model_A_subdir_image'
+            relative_path = os.path.relpath(file_path, directory)
+            unique_base = os.path.splitext(relative_path)[0].replace(os.sep, '_')
+        except ValueError:
+            # Fallback for cases where relpath fails or for temporary files from Hugging Face datasets.
+            unique_base = os.path.splitext(original_filename)[0]
+
         simulations = {
             "facebook": lambda: simulator.facebook(file_path),
             # Instagram
@@ -179,7 +190,7 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv
             try:
                 sim_func()
 
-                original_base, original_ext = os.path.splitext(original_filename)
+                _, original_ext = os.path.splitext(original_filename)
 
                 # Most simulations convert to JPG, but 'document' types preserve the original file extension.
                 processed_ext = original_ext if 'document' in sim_name else ".jpg"
@@ -193,7 +204,7 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv
                     os.makedirs(output_dir, exist_ok=True)
 
                     # Define the final filename and path.
-                    new_filename = f"{original_base}_{sim_name}{processed_ext}"
+                    new_filename = f"{unique_base}_{sim_name}{processed_ext}"
                     new_filepath = os.path.join(output_dir, new_filename)
 
                     # Move the processed file from the temp location to its final destination.
