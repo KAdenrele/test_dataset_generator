@@ -21,11 +21,13 @@ CURATED_DIR = os.path.join(BASE_DIR, "curated/images")
 if os.path.exists(CURATED_DIR):
     shutil.rmtree(CURATED_DIR)
 os.makedirs(CURATED_DIR)
+ORIGINALS_DIR = os.path.join(CURATED_DIR, "originals")
+os.makedirs(ORIGINALS_DIR)
 
 IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.heic']
 
 ALL_SIMULATIONS = [
-    "facebook", "instagram_feed", "instagram_story", "instagram_reel", "tiktok",
+    "original", "facebook", "instagram_feed", "instagram_story", "instagram_reel", "tiktok",
     "whatsapp_standard_media", "whatsapp_high_media", "whatsapp_document",
     "signal_standard_media", "signal_high_media", "signal_document",
     "telegram_media", "telegram_document",
@@ -164,6 +166,20 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv
         except ValueError:
             # Fallback for cases where relpath fails or for temporary files from Hugging Face datasets.
             unique_base = os.path.splitext(original_filename)[0]
+
+        # --- Save the original unprocessed image and log it ---
+        try:
+            _, original_ext = os.path.splitext(original_filename)
+            original_save_filename = f"{unique_base}_original{original_ext}"
+            original_save_path = os.path.join(ORIGINALS_DIR, original_save_filename)
+            shutil.copy2(file_path, original_save_path)
+
+            # Prepare and write the row for the original image to the CSV.
+            base_row_data = [file_path, original_filename, media_type, authenticity, source_model, original_save_filename, original_save_path]
+            one_hot_sims = [1 if sim == "original" else 0 for sim in ALL_SIMULATIONS]
+            csv_writer.writerow(base_row_data + one_hot_sims)
+        except Exception as e:
+            print(f"  [WARNING] Could not save or log original file {original_filename}: {e}")
 
         simulations = {
             "facebook": lambda: simulator.facebook(file_path),
