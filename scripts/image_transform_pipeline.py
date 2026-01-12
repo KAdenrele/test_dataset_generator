@@ -143,33 +143,45 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv
     try:
         media_info = get_media_info(file_path, dataset_name, directory)
         media_type, authenticity, original_filename, source_model = media_info
-        
+
         simulations = {
             "facebook": lambda: simulator.facebook(file_path),
+            # Instagram
             "instagram_feed": lambda: simulator.instagram(file_path, post_type='feed'),
+            "instagram_story": lambda: simulator.instagram(file_path, post_type='story'),
+            "instagram_reel": lambda: simulator.instagram(file_path, post_type='reel'),
+            # TikTok
             "tiktok": lambda: simulator.tiktok(file_path),
-            "whatsapp_standard": lambda: simulator.whatsapp(file_path, quality_mode='standard'),
-            "signal_standard": lambda: simulator.signal(file_path, quality_setting='standard'),
-            "telegram": lambda: simulator.telegram(file_path),
+            # WhatsApp
+            "whatsapp_standard_media": lambda: simulator.whatsapp(file_path, quality_mode='standard', upload_type='media'),
+            "whatsapp_high_media": lambda: simulator.whatsapp(file_path, quality_mode='high', upload_type='media'),
+            "whatsapp_document": lambda: simulator.whatsapp(file_path, upload_type='document'),
+            # Signal
+            "signal_standard_media": lambda: simulator.signal(file_path, quality_setting='standard', as_document=False),
+            "signal_high_media": lambda: simulator.signal(file_path, quality_setting='high', as_document=False),
+            "signal_document": lambda: simulator.signal(file_path, as_document=True),
+            # Telegram
+            "telegram_media": lambda: simulator.telegram(file_path, as_document=False),
+            "telegram_document": lambda: simulator.telegram(file_path, as_document=True),
         }
 
         for sim_name, sim_func in simulations.items():
             try:
-                sim_func() 
+                sim_func()
                 platform_dir_name = sim_name.split('_')[0]
                 output_dir = os.path.join(CURATED_DIR, platform_dir_name)
-                
-                # Setup paths
-                processed_ext = ".jpg"
+                original_base, original_ext = os.path.splitext(original_filename)
+
+                # Most simulations convert to JPG, but 'document' types preserve the original file extension.
+                processed_ext = original_ext if 'document' in sim_name else ".jpg"
                 temp_output_path = os.path.join(output_dir, f"TEMPOUT{processed_ext}")
 
                 if os.path.exists(temp_output_path):
-                    new_filename = f"{os.path.splitext(original_filename)[0]}_{sim_name}{processed_ext}"
+                    new_filename = f"{original_base}_{sim_name}{processed_ext}"
                     new_filepath = os.path.join(output_dir, new_filename)
-                    
                     shutil.move(temp_output_path, new_filepath)
                     csv_writer.writerow([
-                        file_path, original_filename, media_type, authenticity, 
+                        file_path, original_filename, media_type, authenticity,
                         source_model, sim_name, new_filename, new_filepath
                     ])
             except Exception as e:
