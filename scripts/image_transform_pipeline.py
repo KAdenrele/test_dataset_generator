@@ -16,9 +16,19 @@ DATASET_DIRS = {
 }
 
 CURATED_DIR = os.path.join(BASE_DIR, "curated/images")
-os.makedirs(CURATED_DIR, exist_ok=True)
+#remove the curated directory if it exists from a previous execution.
+if os.path.exists(CURATED_DIR):
+    shutil.rmtree(CURATED_DIR)
+os.makedirs(CURATED_DIR)
 
 IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.heic']
+
+ALL_SIMULATIONS = [
+    "facebook", "instagram_feed", "instagram_story", "instagram_reel", "tiktok",
+    "whatsapp_standard_media", "whatsapp_high_media", "whatsapp_document",
+    "signal_standard_media", "signal_high_media", "signal_document",
+    "telegram_media", "telegram_document",
+]
 
 
 image_storage_type_dict = {
@@ -168,22 +178,31 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv
         for sim_name, sim_func in simulations.items():
             try:
                 sim_func()
-                platform_dir_name = sim_name.split('_')[0]
-                output_dir = os.path.join(CURATED_DIR, platform_dir_name)
+
                 original_base, original_ext = os.path.splitext(original_filename)
 
                 # Most simulations convert to JPG, but 'document' types preserve the original file extension.
                 processed_ext = original_ext if 'document' in sim_name else ".jpg"
-                temp_output_path = os.path.join(output_dir, f"TEMPOUT{processed_ext}")
 
+                # The simulator API saves output to a platform-specific subdirectory (e.g., 'facebook', 'instagram').
+                platform_dir_name = sim_name.split('_')[0]
+                temp_output_path = os.path.join(simulator.base_output_dir, platform_dir_name, f"TEMPOUT{processed_ext}")
                 if os.path.exists(temp_output_path):
+                    # Define the final, specific directory for this simulation (e.g., "instagram_story").
+                    output_dir = os.path.join(CURATED_DIR, sim_name)
+                    os.makedirs(output_dir, exist_ok=True)
+
+                    # Define the final filename and path.
                     new_filename = f"{original_base}_{sim_name}{processed_ext}"
                     new_filepath = os.path.join(output_dir, new_filename)
+
+                    # Move the processed file from the temp location to its final destination.
                     shutil.move(temp_output_path, new_filepath)
-                    csv_writer.writerow([
-                        file_path, original_filename, media_type, authenticity,
-                        source_model, sim_name, new_filename, new_filepath
-                    ])
+
+                    # Prepare and write the single, one-hot encoded row to the CSV.
+                    base_row_data = [file_path, original_filename, media_type, authenticity, source_model, new_filename, new_filepath]
+                    one_hot_sims = [1 if sim == sim_name else 0 for sim in ALL_SIMULATIONS]
+                    csv_writer.writerow(base_row_data + one_hot_sims)
             except Exception as e:
                 print(f"  [ERROR] Simulation '{sim_name}' failed for {original_filename}: {e}")
 
@@ -234,10 +253,13 @@ def run_pipeline(dataset_name, target_sample_size=2000):
     with open(metadata_path, 'w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
         # Write header each time to ensure the file is self-contained and fresh.
-        csv_writer.writerow([
+        header = [
             'original_path', 'original_filename', 'media_type', 'authenticity',
-            'source_model', 'simulation', 'processed_filename', 'processed_path'
-        ])
+            'source_model', 'processed_filename', 'processed_path'
+        ]
+        # Add the one-hot encoded simulation columns to the header.
+        header.extend(ALL_SIMULATIONS)
+        csv_writer.writerow(header)
         
         for item in tqdm(all_files, desc=f"Curating {dataset_name}"):
             try:
@@ -266,5 +288,20 @@ def run_pipeline(dataset_name, target_sample_size=2000):
 
             except Exception as e:
                 print(f"  [CRITICAL ERROR] Failed to process {item}: {e}")
+
+    # 5. Cleanup
+    # The simulator API creates base directories (e.g., 'instagram') to store temp files.
+    # After the pipeline moves these files to their final specific directories (e.g., 'instagram_story'),
+    # these base directories are left empty. This step removes them.
+    print("  Cleaning up empty intermediate directories...")
+    platforms_with_subtypes = ["instagram", "whatsapp", "signal", "telegram"]
+    for platform in platforms_with_subtypes:
+        intermediate_dir_path = os.path.join(CURATED_DIR, platform)
+        try:
+            if os.path.isdir(intermediate_dir_path) and not os.listdir(intermediate_dir_path):
+                os.rmdir(intermediate_dir_path)
+                print(f"    - Removed empty directory: {platform}")
+        except OSError as e:
+            print(f"  [WARNING] Could not remove directory {intermediate_dir_path}: {e}")
 
     print(f"--- {dataset_name} Curation Finished ---")
