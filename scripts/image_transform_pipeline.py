@@ -11,8 +11,7 @@ random.seed(42)
 BASE_DIR = "/data"
 
 DATASET_DIRS = {
-    #"SAFE": os.path.join(BASE_DIR, "raw/safe_images_synthetic"),
-    "SAFE": os.path.join(BASE_DIR, "SAFEDataset/data"),
+    "SAFE": os.path.join(BASE_DIR, "/training_data/SAFE/data"),
     "COCO": os.path.join(BASE_DIR, "raw/coco_images_authentic")
 }
 
