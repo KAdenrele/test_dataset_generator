@@ -11,8 +11,10 @@ random.seed(42)
 BASE_DIR = "/data"
 
 DATASET_DIRS = {
-    "SAFE": os.path.join(BASE_DIR, "training_data/SAFE/data"),
-    "COCO": os.path.join(BASE_DIR, "raw/coco_images_authentic")
+    "SAFE": os.path.join(BASE_DIR, "data2/training_data/SAFE/data"),
+    "COCO": os.path.join(BASE_DIR, "data/raw/coco_images_authentic")
+    #"SAFE": os.path.join(BASE_DIR, "raw/safe_images_synthetic"),
+    #"COCO": os.path.join(BASE_DIR, "raw/coco_images_authentic")
 }
 
 CURATED_DIR = os.path.join(BASE_DIR, "curated/images")
@@ -45,15 +47,20 @@ def get_media_info(file_path, dataset_name, base_dir):
     original_filename = os.path.basename(file_path)
 
     source_model = None
+    source_model_details = None
     if dataset_name == "SAFE":
         try:
             relative_dir_path = os.path.relpath(os.path.dirname(file_path), base_dir)
             # The model name is the first component of this relative path... he says... hopefully
-            source_model = relative_dir_path.split(os.sep)[0]
-        except ValueError:
+            path_components = relative_dir_path.split(os.sep)
+            source_model = path_components[0]
+            if len(path_components) > 1:
+                source_model_details = os.path.join(*path_components[1:])
+        except (ValueError, IndexError):
             source_model = "unknown" # Should not happen if paths are correct
+            source_model_details = "unknown"
     
-    return media_type, authenticity, original_filename, source_model
+    return media_type, authenticity, original_filename, source_model, source_model_details
 
 def get_hf_dataset_paths(hf_name, cache_dir, target_sample_size, split='val', image_class="person"):
     """
@@ -154,7 +161,7 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv
     """Runs all social media simulations for a single image and logs results."""
     try:
         media_info = get_media_info(file_path, dataset_name, directory)
-        media_type, authenticity, original_filename, source_model = media_info
+        media_type, authenticity, original_filename, source_model, source_model_details = media_info
 
         # Create a unique base filename from the relative path to prevent overwrites.
         # This is crucial for datasets that have identical filenames in different subdirectories.
@@ -174,7 +181,7 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv
             shutil.copy2(file_path, original_save_path)
 
             # Prepare and write the row for the original image to the CSV.
-            base_row_data = [file_path, original_filename, media_type, authenticity, source_model, original_save_filename, original_save_path]
+            base_row_data = [file_path, original_filename, media_type, authenticity, source_model, source_model_details, original_save_filename, original_save_path]
             one_hot_sims = [1 if sim == "original" else 0 for sim in ALL_SIMULATIONS]
             csv_writer.writerow(base_row_data + one_hot_sims)
         except Exception as e:
@@ -226,7 +233,7 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv
                     shutil.move(temp_output_path, new_filepath)
 
                     # Prepare and write the single, one-hot encoded row to the CSV.
-                    base_row_data = [file_path, original_filename, media_type, authenticity, source_model, new_filename, new_filepath]
+                    base_row_data = [file_path, original_filename, media_type, authenticity, source_model, source_model_details, new_filename, new_filepath]
                     one_hot_sims = [1 if sim == sim_name else 0 for sim in ALL_SIMULATIONS]
                     csv_writer.writerow(base_row_data + one_hot_sims)
             except Exception as e:
@@ -281,7 +288,7 @@ def run_pipeline(dataset_name, target_sample_size=2000):
         # Write header each time to ensure the file is self-contained and fresh.
         header = [
             'original_path', 'original_filename', 'media_type', 'authenticity',
-            'source_model', 'processed_filename', 'processed_path'
+            'source_model', 'source_model_details', 'processed_filename', 'processed_path'
         ]
         # Add the one-hot encoded simulation columns to the header.
         header.extend(ALL_SIMULATIONS)

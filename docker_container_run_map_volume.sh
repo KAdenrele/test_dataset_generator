@@ -7,7 +7,7 @@ echo "Output will be mapped to /mnt/data on the host machine."
 #commands are passed to `bash -c` to be executed sequentially inside the container.
 #output written to /data inside the container will be saved to /mnt/data in the instance due to volume mapping.
 
-docker run --rm -it -v /mnt/data:/data test-data-app bash -c '
+docker run --rm -it -v /mnt/:/data test-data-app bash -c '
   set -e
   K400_EXTRACT_DIR="/data/raw/k400/val"
   
