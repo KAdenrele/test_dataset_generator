@@ -6,9 +6,10 @@ from scripts.image_transform_pipeline import run_pipeline
 
 if __name__ == "__main__":
       #mavos_dataset = load_dataset("unibuc-cs/MAVOS-DD", cache_dir=MAVOS_DIR, num_proc=os.cpu_count())
-      
-    run_pipeline("SAFE", target_sample_size=2000)
-    run_pipeline("COCO", target_sample_size=2000)
+    run_pipeline("SAFE", target_sample_size=10)
+    run_pipeline("COCO", target_sample_size=10)
+    
+    
     
 
     print("--- Main process complete. All datasets downloaded and curated. ---")

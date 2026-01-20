@@ -17,7 +17,7 @@ DATASET_DIRS = {
     #"COCO": os.path.join(BASE_DIR, "raw/coco_images_authentic")
 }
 
-CURATED_DIR = os.path.join(BASE_DIR, "data/curated/images")
+CURATED_DIR = os.path.join(BASE_DIR, "data2/sample_curated/images")
 #remove the curated directory if it exists from a previous execution.
 if os.path.exists(CURATED_DIR):
     shutil.rmtree(CURATED_DIR)
