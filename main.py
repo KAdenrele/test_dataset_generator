@@ -22,7 +22,7 @@ if __name__ == "__main__":
     )
     run_pipeline(
         dataset_name="COCO",
-        image_directory_path=os.path.join(BASE_DIR, "test_datasetcd/raw/coco_images_authentic"),
+        image_directory_path=os.path.join(BASE_DIR, "test_dataset/raw/coco_images_authentic"),
         destination_directory=os.path.join(DEST_BASE, "COCO"),
         is_huggingface=True,
         has_subdirectories=False,
