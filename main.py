@@ -10,7 +10,17 @@ BASE_DIR = "/data"
 DEST_BASE = os.path.join(BASE_DIR, "data/test_dataset/curated/images")
 
 if __name__ == "__main__":
-
+    
+    run_pipeline(
+      dataset_name="SAFE",
+      image_directory_path=os.path.join(BASE_DIR, "data2/training_data/SAFE/data"),
+      destination_directory=os.path.join(DEST_BASE, "SAFE"),
+      is_huggingface=False,
+      has_subdirectories=True,
+      is_synthetic=True,
+      simulations_to_run=ALL_SIMULATIONS[4:],
+      target_sample_size=2000
+  )
     run_pipeline(
         dataset_name="COCO",
         image_directory_path=os.path.join(BASE_DIR, "data/test_dataset/raw/coco_images_authentic"),
@@ -32,16 +42,5 @@ if __name__ == "__main__":
         simulations_to_run=ALL_SIMULATIONS[4:],
         target_sample_size=2000
     )
-
-    run_pipeline(
-      dataset_name="SAFE",
-      image_directory_path=os.path.join(BASE_DIR, "data2/training_data/SAFE/data"),
-      destination_directory=os.path.join(DEST_BASE, "SAFE"),
-      is_huggingface=False,
-      has_subdirectories=True,
-      is_synthetic=True,
-      simulations_to_run=ALL_SIMULATIONS[4:],
-      target_sample_size=2000
-  )
 
     logging.info("--- Main process complete. All datasets downloaded and curated. ---")
