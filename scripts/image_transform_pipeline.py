@@ -334,7 +334,7 @@ def run_pipeline(
     if num_workers is None:
         # Default to all cores minus one to leave resources for other tasks, but always use at least 1.
         cpu_count = os.cpu_count() or 1
-        num_workers = max(1, cpu_count/2)
+        num_workers = max(1, cpu_count // 2)
 
     logging.info(f"Starting parallel processing with {num_workers} workers.")
 
