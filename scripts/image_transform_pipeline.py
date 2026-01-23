@@ -6,6 +6,7 @@ import csv
 import random
 from datasets import load_dataset
 from scripts.media_processes import SocialMediaSimulator
+import concurrent.futures
 import logging
 
 random.seed(42)  
@@ -137,8 +138,9 @@ def get_standard_paths(directory):
     return files
 
 
-def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv_writer, authenticity, simulations_to_run, curated_dir, originals_dir):
+def run_simulations_for_image(file_path, dataset_name, directory, simulator, authenticity, simulations_to_run, curated_dir, originals_dir):
     """Runs all social media simulations for a single image and logs results."""
+    rows_to_write = []
     try:
         media_type, original_filename, source_model, source_model_details = get_media_info(file_path, dataset_name, directory)
 
@@ -166,7 +168,7 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv
                     # Prepare and write the row for the original image to the CSV.
                     base_row_data = [file_path, original_filename, media_type, authenticity, source_model, source_model_details, original_save_filename, original_save_path]
                     one_hot_sims = [1 if sim == "original" else 0 for sim in ALL_SIMULATIONS]
-                    csv_writer.writerow(base_row_data + one_hot_sims)
+                    rows_to_write.append(base_row_data + one_hot_sims)
             except Exception as e:
                 logging.warning(f"Could not save or log original file {original_filename}: {e}")
 
@@ -225,15 +227,53 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, csv
                     # Prepare and write the single, one-hot encoded row to the CSV.
                     base_row_data = [file_path, original_filename, media_type, authenticity, source_model, source_model_details, new_filename, new_filepath]
                     one_hot_sims = [1 if sim == sim_name else 0 for sim in ALL_SIMULATIONS]
-                    csv_writer.writerow(base_row_data + one_hot_sims)
+                    rows_to_write.append(base_row_data + one_hot_sims)
             except Exception as e:
                 logging.error(f"Simulation '{sim_name}' failed for {original_filename}: {e}")
 
     except Exception as e:
         logging.error(f"Metadata extraction failed for {os.path.basename(file_path)}: {e}")
+    
+    return rows_to_write
 
 
+def _process_item_worker(args):
+    """
+    A picklable, top-level worker function for parallel processing.
+    Handles processing for a single item (either local file or Hugging Face item).
+    """
+    (item, dataset_name, image_directory_path, destination_directory, is_huggingface, 
+     is_synthetic, simulations_to_run, hf_name) = args
 
+    authenticity = "synthetic" if is_synthetic else "authentic"
+    curated_dir = destination_directory
+    originals_dir = os.path.join(curated_dir, "originals")
+    simulator = SocialMediaSimulator(base_output_dir=curated_dir)
+    
+    file_to_process = None
+    temp_file_to_clean = None
+
+    try:
+        if is_huggingface:
+            # For HF datasets, we must create a temporary local file for the simulator.
+            # Loading the dataset is fast after the first time due to caching.
+            dataset_obj = load_dataset(hf_name, cache_dir=image_directory_path)
+            synthetic_name, idx = item
+            split = synthetic_name.split('_')[0]
+            pil_img = dataset_obj[split][idx]['image']
+            
+            temp_path = os.path.join(image_directory_path, f"TEMP_INPUT_{os.getpid()}_{synthetic_name}")
+            pil_img.convert("RGB").save(temp_path)
+            file_to_process = temp_path
+            temp_file_to_clean = temp_path
+        else:
+            # For local files, the item is the direct path.
+            file_to_process = item
+
+        return run_simulations_for_image(file_to_process, dataset_name, image_directory_path, simulator, authenticity, simulations_to_run, curated_dir, originals_dir)
+    finally:
+        if temp_file_to_clean and os.path.exists(temp_file_to_clean):
+            os.remove(temp_file_to_clean)
 
 def run_pipeline(
     dataset_name: str,
@@ -258,17 +298,11 @@ def run_pipeline(
     authenticity = "synthetic" if is_synthetic else "authentic"
 
     # 2. Path/Data Discovery
-    dataset_obj = None  # To keep HF dataset in memory if needed
-    
     if is_huggingface:
         if not hf_name:
             logging.error(f"Hugging Face dataset name (hf_name) must be provided for {dataset_name}.")
             return
-        # Now returns a list of (synthetic_name, index)
         all_files = get_hf_dataset_paths(hf_name, directory, target_sample_size)
-        # We need the actual dataset object to pull the images in the loop
-        from datasets import load_dataset
-        dataset_obj = load_dataset(hf_name, cache_dir=directory)
     else:
         # Standard local file search
         if has_subdirectories:
@@ -283,9 +317,23 @@ def run_pipeline(
     # 3. Setup
     metadata_path = os.path.join(CURATED_DIR, f"{dataset_name}_metadata.csv")
     write_header = not os.path.exists(metadata_path)
-    simulator = SocialMediaSimulator(base_output_dir=CURATED_DIR)
 
-    # 4. Processing Loop
+    # 4. Parallel Processing Loop
+    tasks = [
+        (item, dataset_name, image_directory_path, destination_directory, is_huggingface, 
+         is_synthetic, simulations_to_run, hf_name) 
+        for item in all_files
+    ]
+
+    all_rows = []
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        # Use tqdm to show progress for the parallel execution
+        results = tqdm(executor.map(_process_item_worker, tasks), total=len(tasks), desc=f"Curating {dataset_name}")
+        for result_rows in results:
+            if result_rows:
+                all_rows.extend(result_rows)
+
+    # 5. Write all results to CSV at once
     with open(metadata_path, 'a', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
         if write_header:
@@ -293,39 +341,12 @@ def run_pipeline(
                 'original_path', 'original_filename', 'media_type', 'authenticity',
                 'source_model', 'source_model_details', 'processed_filename', 'processed_path'
             ]
-            # Add the one-hot encoded simulation columns to the header.
             header.extend(ALL_SIMULATIONS)
             csv_writer.writerow(header)
-        
-        for item in tqdm(all_files, desc=f"Curating {dataset_name}"):
-            try:
-                if is_huggingface:
-                    # --- HANDLING HUGGING FACE (In-Memory) ---
-                    synthetic_name, idx = item
-                    split = synthetic_name.split('_')[0] # Get 'val' from 'val_102.jpg'
-                    
-                    # Access the PIL image
-                    pil_img = dataset_obj[split][idx]['image']
-                    
-                    # Create a temporary local file so the simulator can read it
-                    temp_path = os.path.join(directory, f"TEMP_INPUT_{synthetic_name}")
-                    pil_img.convert("RGB").save(temp_path) # Convert to RGB to ensure JPEG compatibility
-                    
-                    run_simulations_for_image(temp_path, dataset_name, directory, simulator, csv_writer, authenticity, simulations_to_run, CURATED_DIR, ORIGINALS_DIR)
-                    
-                    # Cleanup the temp file
-                    if os.path.exists(temp_path):
-                        os.remove(temp_path)
-                
-                else:
-                    # --- HANDLING LOCAL STORAGE ---
-                    # item is a direct file_path (string)
-                    run_simulations_for_image(item, dataset_name, directory, simulator, csv_writer, authenticity, simulations_to_run, CURATED_DIR, ORIGINALS_DIR)
+        if all_rows:
+            csv_writer.writerows(all_rows)
 
-            except Exception as e:
-                logging.error(f"Failed to process {item}: {e}")
-
-    # 5. Cleanup
+    # 6. Cleanup
     # The simulator API creates base directories (e.g., 'instagram') to store temp files.
     # After the pipeline moves these files to their final specific directories (e.g., 'instagram_story'),
     # these base directories are left empty. This step removes them.
