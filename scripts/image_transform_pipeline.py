@@ -246,14 +246,25 @@ def _process_item_worker(args):
      authenticity, simulations_to_run) = args
 
     curated_dir = destination_directory
-    originals_dir = os.path.join(curated_dir, "originals")
-    simulator = SocialMediaSimulator(base_output_dir=curated_dir)
     
-    # The base_directory argument is used for calculating the relative path for unique filenames.
-    return run_simulations_for_image(
-        file_path, dataset_name, base_directory, simulator, 
-        authenticity, simulations_to_run, curated_dir, originals_dir
-    )
+    # Create a unique temporary directory for this worker process to avoid race conditions.
+    # A random integer is added to the process ID for extra robustness.
+    worker_temp_dir = os.path.join(curated_dir, f"worker_temp_{os.getpid()}_{random.randint(0, 999999)}")
+    
+    try:
+        originals_dir = os.path.join(curated_dir, "originals")
+        # Instantiate the simulator with the unique temp dir as its base output directory.
+        simulator = SocialMediaSimulator(base_output_dir=worker_temp_dir)
+        
+        # The base_directory argument is used for calculating the relative path for unique filenames.
+        return run_simulations_for_image(
+            file_path, dataset_name, base_directory, simulator, 
+            authenticity, simulations_to_run, curated_dir, originals_dir
+        )
+    finally:
+        # Clean up the worker's temporary directory after it's done.
+        if os.path.exists(worker_temp_dir):
+            shutil.rmtree(worker_temp_dir)
 
 def run_pipeline(
     dataset_name: str,
