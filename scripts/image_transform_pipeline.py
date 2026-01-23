@@ -239,41 +239,21 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, aut
 
 def _process_item_worker(args):
     """
-    A picklable, top-level worker function for parallel processing.
-    Handles processing for a single item (either local file or Hugging Face item).
+    A picklable, top-level worker function for parallel processing. It now only
+    takes a file path and the necessary metadata to process it.
     """
-    (item, dataset_name, image_directory_path, destination_directory, is_huggingface, 
-     is_synthetic, simulations_to_run, hf_name) = args
+    (file_path, dataset_name, base_directory, destination_directory, 
+     authenticity, simulations_to_run) = args
 
-    authenticity = "synthetic" if is_synthetic else "authentic"
     curated_dir = destination_directory
     originals_dir = os.path.join(curated_dir, "originals")
     simulator = SocialMediaSimulator(base_output_dir=curated_dir)
     
-    file_to_process = None
-    temp_file_to_clean = None
-
-    try:
-        if is_huggingface:
-            # For HF datasets, we must create a temporary local file for the simulator.
-            # Loading the dataset is fast after the first time due to caching.
-            dataset_obj = load_dataset(hf_name, cache_dir=image_directory_path)
-            synthetic_name, idx = item
-            split = synthetic_name.split('_')[0]
-            pil_img = dataset_obj[split][idx]['image']
-            
-            temp_path = os.path.join(image_directory_path, f"TEMP_INPUT_{os.getpid()}_{synthetic_name}")
-            pil_img.convert("RGB").save(temp_path)
-            file_to_process = temp_path
-            temp_file_to_clean = temp_path
-        else:
-            # For local files, the item is the direct path.
-            file_to_process = item
-
-        return run_simulations_for_image(file_to_process, dataset_name, image_directory_path, simulator, authenticity, simulations_to_run, curated_dir, originals_dir)
-    finally:
-        if temp_file_to_clean and os.path.exists(temp_file_to_clean):
-            os.remove(temp_file_to_clean)
+    # The base_directory argument is used for calculating the relative path for unique filenames.
+    return run_simulations_for_image(
+        file_path, dataset_name, base_directory, simulator, 
+        authenticity, simulations_to_run, curated_dir, originals_dir
+    )
 
 def run_pipeline(
     dataset_name: str,
@@ -298,20 +278,42 @@ def run_pipeline(
     authenticity = "synthetic" if is_synthetic else "authentic"
 
     # 2. Path/Data Discovery
+    files_to_process = []
+    hf_temp_dir = None
+    # This is the directory against which relpath is calculated for unique names
+    base_directory_for_relpath = directory
+
     if is_huggingface:
         if not hf_name:
             logging.error(f"Hugging Face dataset name (hf_name) must be provided for {dataset_name}.")
             return
-        all_files = get_hf_dataset_paths(hf_name, directory, target_sample_size)
+        
+        # Create a temporary directory to store materialized images from the HF dataset
+        hf_temp_dir = os.path.join(directory, "hf_temp_images")
+        os.makedirs(hf_temp_dir, exist_ok=True)
+        base_directory_for_relpath = hf_temp_dir # Adjust base for relpath calculation
+
+        logging.info("Loading Hugging Face dataset and materializing images to temp files...")
+        dataset_obj = load_dataset(hf_name, cache_dir=directory)
+        hf_items = get_hf_dataset_paths(hf_name, directory, target_sample_size)
+
+        for synthetic_name, idx in tqdm(hf_items, desc="Materializing HF images"):
+            split = synthetic_name.split('_')[0]
+            pil_img = dataset_obj[split][idx]['image']
+            
+            # Save the image to a temporary file that the worker can access
+            temp_path = os.path.join(hf_temp_dir, synthetic_name)
+            pil_img.convert("RGB").save(temp_path)
+            files_to_process.append(temp_path)
     else:
         # Standard local file search
         if has_subdirectories:
-            all_files = get_non_huggingface_dataset_paths(directory, target_sample_size)
+            files_to_process = get_non_huggingface_dataset_paths(directory, target_sample_size)
         else:
-            all_files = get_standard_paths(directory)
+            files_to_process = get_standard_paths(directory)
 
-    if not all_files:
-        logging.info(f"No files found for {dataset_name}. Exiting.")
+    if not files_to_process:
+        logging.info(f"No files found for processing. Exiting.")
         return
 
     # 3. Setup
@@ -320,9 +322,9 @@ def run_pipeline(
 
     # 4. Parallel Processing Loop
     tasks = [
-        (item, dataset_name, image_directory_path, destination_directory, is_huggingface, 
-         is_synthetic, simulations_to_run, hf_name) 
-        for item in all_files
+        (file_path, dataset_name, base_directory_for_relpath, destination_directory, 
+         authenticity, simulations_to_run) 
+        for file_path in files_to_process
     ]
 
     all_rows = []
@@ -347,6 +349,11 @@ def run_pipeline(
             csv_writer.writerows(all_rows)
 
     # 6. Cleanup
+    # Clean up the temporary directory used for Hugging Face images
+    if hf_temp_dir and os.path.exists(hf_temp_dir):
+        logging.info(f"Cleaning up temporary Hugging Face image directory: {hf_temp_dir}")
+        shutil.rmtree(hf_temp_dir)
+
     # The simulator API creates base directories (e.g., 'instagram') to store temp files.
     # After the pipeline moves these files to their final specific directories (e.g., 'instagram_story'),
     # these base directories are left empty. This step removes them.
