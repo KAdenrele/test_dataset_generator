@@ -264,7 +264,8 @@ def run_pipeline(
     is_synthetic: bool,
     simulations_to_run: list,
     hf_name: str = None,
-    target_sample_size: int = 2000
+    target_sample_size: int = 2000,
+    max_workers: int = None
 ):
     logging.info(f"--- Starting Image Curation Pipeline for {dataset_name} ---")
 
@@ -328,7 +329,16 @@ def run_pipeline(
     ]
 
     all_rows = []
-    with concurrent.futures.ProcessPoolExecutor() as executor:
+
+    num_workers = max_workers
+    if num_workers is None:
+        # Default to all cores minus one to leave resources for other tasks, but always use at least 1.
+        cpu_count = os.cpu_count() or 1
+        num_workers = max(1, cpu_count/2)
+
+    logging.info(f"Starting parallel processing with {num_workers} workers.")
+
+    with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
         # Use tqdm to show progress for the parallel execution
         results = tqdm(executor.map(_process_item_worker, tasks), total=len(tasks), desc=f"Curating {dataset_name}")
         for result_rows in results:
