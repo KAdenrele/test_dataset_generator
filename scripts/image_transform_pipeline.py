@@ -165,10 +165,10 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, aut
                 else:
                     shutil.copy2(file_path, original_save_path)
 
-                    # Prepare and write the row for the original image to the CSV.
-                    base_row_data = [file_path, original_filename, media_type, authenticity, source_model, source_model_details, original_save_filename, original_save_path]
-                    one_hot_sims = [1 if sim == "original" else 0 for sim in ALL_SIMULATIONS]
-                    rows_to_write.append(base_row_data + one_hot_sims)
+                # Always log the original file's metadata if it's part of the run.
+                base_row_data = [file_path, original_filename, media_type, authenticity, source_model, source_model_details, original_save_filename, original_save_path]
+                one_hot_sims = [1 if sim == "original" else 0 for sim in ALL_SIMULATIONS]
+                rows_to_write.append(base_row_data + one_hot_sims)
             except Exception as e:
                 logging.warning(f"Could not save or log original file {original_filename}: {e}")
 
@@ -208,26 +208,23 @@ def run_simulations_for_image(file_path, dataset_name, directory, simulator, aut
                 new_filename = f"{unique_base}_{sim_name}{processed_ext}"
                 new_filepath = os.path.join(output_dir, new_filename)
 
-                if os.path.exists(new_filepath):
+                if not os.path.exists(new_filepath):
+                    sim_func()
+                    platform_dir_name = sim_name.split('_')[0]
+                    temp_output_path = os.path.join(simulator.base_output_dir, platform_dir_name, f"TEMPOUT{processed_ext}")
+                    if os.path.exists(temp_output_path):
+                        os.makedirs(output_dir, exist_ok=True)
+                        shutil.move(temp_output_path, new_filepath)
+                    else:
+                        logging.warning(f"Simulation '{sim_name}' did not produce an output file. Skipping log entry.")
+                        continue # Do not log if the file wasn't created.
+                else:
                     logging.info(f"Skipping existing simulation file: {new_filepath}")
-                    continue
 
-                sim_func()
-
-                # The simulator API saves output to a platform-specific subdirectory (e.g., 'facebook', 'instagram').
-                platform_dir_name = sim_name.split('_')[0]
-                temp_output_path = os.path.join(simulator.base_output_dir, platform_dir_name, f"TEMPOUT{processed_ext}")
-                if os.path.exists(temp_output_path):
-                    # Define the final, specific directory for this simulation (e.g., "instagram_story").
-                    os.makedirs(output_dir, exist_ok=True)
-
-                    # Move the processed file from the temp location to its final destination.
-                    shutil.move(temp_output_path, new_filepath)
-
-                    # Prepare and write the single, one-hot encoded row to the CSV.
-                    base_row_data = [file_path, original_filename, media_type, authenticity, source_model, source_model_details, new_filename, new_filepath]
-                    one_hot_sims = [1 if sim == sim_name else 0 for sim in ALL_SIMULATIONS]
-                    rows_to_write.append(base_row_data + one_hot_sims)
+                # Always log the metadata, as long as the file exists (either pre-existing or just created).
+                base_row_data = [file_path, original_filename, media_type, authenticity, source_model, source_model_details, new_filename, new_filepath]
+                one_hot_sims = [1 if sim == sim_name else 0 for sim in ALL_SIMULATIONS]
+                rows_to_write.append(base_row_data + one_hot_sims)
             except Exception as e:
                 logging.error(f"Simulation '{sim_name}' failed for {original_filename}: {e}")
 

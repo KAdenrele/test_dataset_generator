@@ -17,7 +17,7 @@ if __name__ == "__main__":
       is_huggingface=False,
       has_subdirectories=True,
       is_synthetic=True,
-      simulations_to_run=ALL_SIMULATIONS[3:],
+      simulations_to_run=["original"],
       target_sample_size=2000,
       max_workers=3
   )
@@ -29,7 +29,7 @@ if __name__ == "__main__":
     is_huggingface=True,
     has_subdirectories=False,
     is_synthetic=False,
-    simulations_to_run=ALL_SIMULATIONS[3:],
+    simulations_to_run=["original"],
     hf_name="detection-datasets/coco",
     target_sample_size=2000,
     max_workers=3
@@ -42,7 +42,7 @@ if __name__ == "__main__":
       is_huggingface=False,
       has_subdirectories=False,
       is_synthetic=True,
-      simulations_to_run=ALL_SIMULATIONS[3:],
+      simulations_to_run=["original"],
       target_sample_size=2000,
       max_workers=3
   )
