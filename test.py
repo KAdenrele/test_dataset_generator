@@ -16,7 +16,7 @@ if __name__ == "__main__":
         is_huggingface=False,
         has_subdirectories=True,
         is_synthetic=True,
-        simulations_to_run=ALL_SIMULATIONS,
+        simulations_to_run=ALL_SIMULATIONS[3:],
         target_sample_size=2
     )
 
@@ -27,7 +27,7 @@ if __name__ == "__main__":
         is_huggingface=True,
         has_subdirectories=False,
         is_synthetic=False,
-        simulations_to_run=ALL_SIMULATIONS,
+        simulations_to_run=ALL_SIMULATIONS[3:],
         hf_name="detection-datasets/coco",
         target_sample_size=2
     )

@@ -14,7 +14,7 @@ random.seed(42)
 IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.heic']
 
 ALL_SIMULATIONS = [
-    "original", "whatsapp_document", "signal_document","telegram_document",
+    "whatsapp_document", "signal_document","telegram_document","original", 
     "facebook", "instagram_feed", "instagram_story", "instagram_reel", "tiktok",
     "whatsapp_standard_media", "whatsapp_high_media", 
     "signal_standard_media", "signal_high_media", 
