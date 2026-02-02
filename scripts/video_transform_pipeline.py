@@ -76,7 +76,7 @@ def get_hf_video_class_names(hf_name: str) -> list:
         logging.error(f"Failed to fetch dataset info for '{hf_name}'. Reason: {e}")
         return []
 
-def get_hf_video_dataset_paths(hf_name, cache_dir, target_sample_size, split='train', video_class: str = None):
+def get_hf_video_dataset_paths(hf_name, cache_dir, target_sample_size, split='val', video_class: str = None):
     """
     Loads a HF video dataset, samples it, and returns a list of file paths.
     If `video_class` is specified, it will filter the dataset for that class before sampling.

@@ -50,8 +50,18 @@ if __name__ == "__main__":
   #     max_workers=3
   # )
 
+  run_video_pipeline(
+        dataset_name="K400",
+        video_directory_path=os.path.join(BASE_DIR, "raw/k400/val"),
+        destination_directory=os.path.join(VIDEO_DEST_BASE, "K400"),
+        is_huggingface=False,
+        has_subdirectories=False,
+        is_synthetic=False,
+        simulations_to_run=VIDEO_SIMULATIONS[3:],
+        target_sample_size=2000,
+    )
 
- run_video_pipeline(
+  run_video_pipeline(
         dataset_name="MAVOS",
         video_directory_path=os.path.join(BASE_DIR, "raw/MAVOS_DD"),
         destination_directory=os.path.join(VIDEO_DEST_BASE, "MAVOS_DD"),
@@ -62,13 +72,4 @@ if __name__ == "__main__":
         simulations_to_run=VIDEO_SIMULATIONS[3:],
         target_sample_size=2000,
     )
- run_video_pipeline(
-        dataset_name="K400",
-        video_directory_path=os.path.join(BASE_DIR, "raw/k400/val"),
-        destination_directory=os.path.join(VIDEO_DEST_BASE, "K400"),
-        is_huggingface=False,
-        has_subdirectories=False,
-        is_synthetic=False,
-        simulations_to_run=VIDEO_SIMULATIONS[3:],
-        target_sample_size=2000,
-    )
+ 
