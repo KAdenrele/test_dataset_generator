@@ -56,7 +56,7 @@ if __name__ == "__main__":
         video_directory_path=os.path.join(BASE_DIR, "raw/MAVOS_DD"),
         destination_directory=os.path.join(VIDEO_DEST_BASE, "MAVOS_DD"),
         is_huggingface=True,
-        has_subdirectories=False,
+        has_subdirectories=True,
         hf_name="unibuc-cs/MAVOS-DD",
         is_synthetic=True,
         simulations_to_run=VIDEO_SIMULATIONS[3:],
