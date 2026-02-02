@@ -1,34 +1,47 @@
 import os
 from datasets import load_dataset
 from scripts.image_transform_pipeline import run_pipeline, ALL_SIMULATIONS
+from scripts.video_transform_pipeline import run_pipeline as run_video_pipeline, ALL_SIMULATIONS as VIDEO_SIMULATIONS
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 BASE_DIR = "./data"
-DEST_BASE = os.path.join(BASE_DIR, "curated")
+DEST_BASE = os.path.join(BASE_DIR, "curated/videos/MAVOS_DD")
 
 if __name__ == "__main__":
-    run_pipeline(
-        dataset_name="SAFE",
-        image_directory_path=os.path.join(BASE_DIR, "raw/safe_images_synthetic"),
-        destination_directory=os.path.join(DEST_BASE, "SAFE"),
-        is_huggingface=False,
-        has_subdirectories=True,
-        is_synthetic=True,
-        simulations_to_run=ALL_SIMULATIONS[3:],
-        target_sample_size=2
-    )
+    # run_pipeline(
+    #     dataset_name="SAFE",
+    #     image_directory_path=os.path.join(BASE_DIR, "raw/safe_images_synthetic"),
+    #     destination_directory=os.path.join(DEST_BASE, "SAFE"),
+    #     is_huggingface=False,
+    #     has_subdirectories=True,
+    #     is_synthetic=True,
+    #     simulations_to_run=["original"],
+    #     target_sample_size=2
+    # )
 
-    run_pipeline(
-        dataset_name="COCO",
-        image_directory_path=os.path.join(BASE_DIR, "raw/coco_images_authentic"),
-        destination_directory=os.path.join(DEST_BASE, "COCO"),
+    # run_pipeline(
+    #     dataset_name="COCO",
+    #     image_directory_path=os.path.join(BASE_DIR, "raw/coco_images_authentic"),
+    #     destination_directory=os.path.join(DEST_BASE, "COCO"),
+    #     is_huggingface=True,
+    #     has_subdirectories=False,
+    #     is_synthetic=False,
+    #     simulations_to_run=["original"],
+    #     hf_name="detection-datasets/coco",
+    #     target_sample_size=2
+    # )
+
+    run_video_pipeline(
+        dataset_name="MAVOS",
+        video_directory_path=os.path.join(BASE_DIR, "raw/MAVOS_DD"),
+        destination_directory=os.path.join(DEST_BASE, "MAVOS_DD"),
         is_huggingface=True,
         has_subdirectories=False,
-        is_synthetic=False,
-        simulations_to_run=ALL_SIMULATIONS[3:],
-        hf_name="detection-datasets/coco",
-        target_sample_size=2
+        hf_name="unibuc-cs/MAVOS-DD",
+        is_synthetic=True,
+        simulations_to_run=VIDEO_SIMULATIONS[3:],
+        target_sample_size=2000,
     )
     logging.info("--- Main process complete. All datasets downloaded and curated. ---")

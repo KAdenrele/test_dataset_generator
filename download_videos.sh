@@ -9,7 +9,7 @@ echo "Output will be mapped to /mnt/data on the host machine."
 
 docker run --rm -d --name test-data-proc -v /mnt/:/data test-data-app bash -c '
   set -e
-  K400_EXTRACT_DIR="/data/raw/k400/val"
+  K400_EXTRACT_DIR="/test_dataset/raw/k400/val"
   
   echo "Checking for existing Kinetics-400 data..."
   if [ ! -d "$K400_EXTRACT_DIR" ] || [ -z "$(ls -A "$K400_EXTRACT_DIR")" ]; then

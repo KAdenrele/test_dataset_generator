@@ -4,11 +4,6 @@ import shutil
 import subprocess
 from datetime import datetime
 from PIL import Image, ImageCms, ImageOps
-import logging
-
-"""
-This is a copy of the media processing pipelines from the main project repo.
-"""
 
 class SocialMediaSimulator:
     def __init__(self, base_output_dir="media_output"):
@@ -31,7 +26,7 @@ class SocialMediaSimulator:
             width, height = map(int, output.split('x'))
             return width, height
         except Exception as e:
-            logging.error(f"Error getting video dimensions: {e}")
+            print(f"Error: {e}")
             return None, None
 
     # =========================================================================
@@ -48,8 +43,69 @@ class SocialMediaSimulator:
         output_dir = os.path.join(self.base_output_dir, "facebook")
         self._ensure_dir(output_dir)
 
+        ext = os.path.splitext(input_path)[1].lower()
+        is_image = ext in ['.jpg', '.jpeg', '.png', '.heic', '.webp', '.tiff']
+        is_video = ext in ['.mp4', '.mov', '.avi', '.mkv']
+        
+        if is_image:
+             output_filename = "TEMPOUT.jpg"
+        elif is_video:
+             output_filename = "TEMPOUT.mp4"
+        else:
+             output_filename = "TEMPOUT" + ext
+        
+        output_path = os.path.join(output_dir, output_filename)
+
+        if is_video:
+            self._facebook_process_video(input_path, output_path)
+        elif is_image:
+            self._facebook_process_image(input_path, output_path)
+        else:
+            print("Unsupported media type for Facebook simulation.")
+            return "file type not supported"
+
+    def _facebook_process_video(self, input_path, output_path):
+        width, height = self._get_video_dimensions(input_path)
+        if width is None or height is None:
+            print("Could not retrieve video dimensions.")
+            return
+
+        #Downscaling - Cap at 2048px on the longest edge
+        scale_filter = "scale='if(gt(a,1),min(2048,iw),-2)':'if(gt(a,1),-2,min(2048,ih))'"
+        
+        #Chroma Subsampling - Force 4:2:0
+        format_filter = "format=yuv420p"
+        
+        #Loudness normalization - target -16 LUFS as per documentation.
+        audio_filter = "loudnorm=I=-16:LRA=11:TP=-1.5"
+
+        cmd = [
+            "ffmpeg", "-y", "-i", input_path,
+            "-vf", f"{scale_filter},{format_filter}",
+            #codec transcoding H.264
+            "-c:v", "libx264", 
+            "-preset", "fast",
+            "-crf", "18", # High quality, variable bitrate approach
+            "-maxrate", "4000k", "-bufsize", "8000k",
+            #Group Of Pictures (GOP) Standardization - Force keyframe every 2 seconds (assuming 30fps = 60)
+            "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
+            "-af", audio_filter,
+            "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
+            #EXIF Stripping & Faststart for web
+            "-map_metadata", "-1", 
+            "-movflags", "+faststart",
+            output_path
+        ]
+
         try:
-            logging.info(f"Facebook Processing: {os.path.basename(input_path)}")
+            subprocess.run(cmd, check=True, stderr=subprocess.DEVNULL)
+            print(f"Saved to: {output_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"Facebook video pipeline failed: {e}")
+    
+    def _facebook_process_image(self, input_path, output_path):
+        try:
+            print(f"\n Facebook Processing: {os.path.basename(input_path)} ")
             original_image = Image.open(input_path)
             
             # 1. Convert to sRGB
@@ -62,7 +118,7 @@ class SocialMediaSimulator:
                 else:
                     working_image = ImageCms.profileToProfile(working_image, srgb_profile, srgb_profile, outputMode="RGB")
             except Exception:
-                 working_image = working_image.convert("RGB")
+                working_image = working_image.convert("RGB")
 
             # 2. Resize to max 2048px
             max_dimension = 2048
@@ -71,16 +127,13 @@ class SocialMediaSimulator:
                 scale_factor = max_dimension / max(width, height)
                 new_size = (int(width * scale_factor), int(height * scale_factor))
                 working_image = working_image.resize(new_size, Image.Resampling.LANCZOS)
-                logging.info(f"Downscaled to {new_size}")
-
-            output_path = os.path.join(output_dir, "TEMPOUT.jpg")
-
+                print(f"Downscaled to {new_size}")
 
             working_image.save(output_path, "JPEG", quality=85, optimize=True, subsampling=0)
-            logging.info(f"Saved to: {output_path}")
+            print(f"Saved to: {output_path}")
 
         except Exception as e:
-            logging.error(f"Facebook pipeline failed: {e}")
+            print(f"Facebook image pipeline failed: {e}")
 
     # =========================================================================
     # INSTAGRAM
@@ -99,7 +152,7 @@ class SocialMediaSimulator:
         output_filename = "TEMPOUT.mp4" if is_video else "TEMPOUT.jpg"
         output_path = os.path.join(output_dir, output_filename)
 
-        logging.info(f"Instagram Processing ({post_type.upper()})")
+        print(f"\n Instagram Processing ({post_type.upper()})")
 
         if not is_video:
             try:
@@ -128,9 +181,9 @@ class SocialMediaSimulator:
                         img = ImageOps.fit(img, (target_width, target_height), method=Image.Resampling.LANCZOS)
 
                     img.save(output_path, "JPEG", quality=80, optimize=True, subsampling=0)
-                    logging.info(f"Saved Image: {output_path}")
+                    print(f"Saved Image: {output_path}")
             except Exception as e:
-                logging.error(f"IG image pipeline failed: {e}")
+                print(f"IG pipeline failed: {e}")
 
         else:
             # Video Logic (FFmpeg)
@@ -156,9 +209,10 @@ class SocialMediaSimulator:
             ]
             try:
                 subprocess.run(cmd, check=True, stderr=subprocess.DEVNULL)
-                logging.info(f"Saved Video: {output_path}")
+                print(f"Saved Video: {output_path}")
             except Exception:
-                logging.error("IG video pipeline failed.")
+                print("IG pipeline failed.")
+
 
     # =========================================================================
     # WHATSAPP
@@ -188,11 +242,11 @@ class SocialMediaSimulator:
              output_filename = "TEMPOUT" + ext
         
         output_path = os.path.join(output_dir, output_filename)
-        logging.info(f"WhatsApp Processing ({upload_type.upper()}/{quality_mode.upper()})")
+        print(f"\n WhatsApp Processing ({upload_type.upper()}/{quality_mode.upper()})")
 
         if upload_type == 'document':
             shutil.copy2(input_path, output_path)
-            logging.info("Document Copy complete.")
+            print(f"Document Copy complete.")
             return
 
         if is_image:
@@ -213,9 +267,9 @@ class SocialMediaSimulator:
                 
                 jpg_quality = 80 if quality_mode == 'high' else 70
                 img.save(output_path, 'JPEG', quality=jpg_quality, optimize=True)
-                logging.info(f"Saved Image: {output_path}")
+                print(f"Saved Image: {output_path}")
         except Exception as e:
-            logging.error(f"WhatsApp Image failed: {e}")
+            print(f" WA Image failed: {e}")
 
     def _whatsapp_process_video(self, input_path, output_path, quality_mode):
         scale = "scale=-2:720" if quality_mode == 'high' else "scale=-2:480"
@@ -230,9 +284,9 @@ class SocialMediaSimulator:
         ]
         try:
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            logging.info(f"Saved Video: {output_path}")
+            print(f"Saved Video: {output_path}")
         except Exception:
-            logging.error("WhatsApp Video failed.")
+            print(" WA Video failed.")
 
     # =========================================================================
     # SIGNAL
@@ -259,11 +313,11 @@ class SocialMediaSimulator:
 
         output_path = os.path.join(output_dir, output_filename)
 
-        logging.info(f"Signal Processing (Quality: {quality_setting.upper()})")
+        print(f"\n Signal Processing (Quality: {quality_setting.upper()})")
         
         if as_document:
             shutil.copy2(input_path, output_path)
-            logging.info("Document Copy complete.")
+            print(f"Document Copy complete.")
             return
 
         if is_image:
@@ -271,7 +325,7 @@ class SocialMediaSimulator:
         elif is_video:
             self._signal_process_video(input_path, output_path)
         else:
-            logging.warning("Unsupported media type for Signal.")
+            print("Unsupported media type for Signal.")
 
     def _signal_process_image(self, input_path, output_path, quality_setting):
         try:
@@ -286,9 +340,9 @@ class SocialMediaSimulator:
                 
                 # Signal specifically strips metadata in media mode
                 img.save(output_path, 'JPEG', quality=80)
-                logging.info(f"Metadata stripped. Resized to {img.size}. Saved to: {output_path}")
+                print(f"Metadata stripped. Resized to {img.size}. Saved to: {output_path}")
         except Exception as e:
-            logging.error(f"Signal image processing failed: {e}")
+            print(f"Error: {e}")
 
     def _signal_process_video(self, input_path, output_path):
 
@@ -303,12 +357,12 @@ class SocialMediaSimulator:
             '-map_metadata', '-1', 
             output_path
         ]
-        logging.info(f"Applying aggressive video compression (Max 640p, {bitrate} bitrate)...")
+        print(f"  [Video] Applying aggressive compression (Max 640p, {bitrate} bitrate)...")
         try:
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            logging.info(f"Saved Video: {output_path}")
+            print(f"Saved Video: {output_path}")
         except Exception:
-            logging.error("Signal Video failed.")
+            print(" Signal Video failed.")
 
     # =========================================================================
     # TELEGRAM
@@ -335,11 +389,11 @@ class SocialMediaSimulator:
 
         output_path = os.path.join(output_dir, output_filename)
 
-        logging.info(f"Telegram Processing (Document: {as_document})")
+        print(f"\n Telegram Processing (Document: {as_document})")
 
         if as_document:
             shutil.copy2(input_path, output_path)
-            logging.info(f"Original quality preserved. Saved to: {output_path}")
+            print(f"Original quality preserved. Saved to: {output_path}")
             return
 
         if is_image:
@@ -351,6 +405,9 @@ class SocialMediaSimulator:
     def _telegram_process_image(self, input_path, output_path):
         try:
             with Image.open(input_path) as img:
+                #ensure image is in RGB mode before saving as JPEG
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
                 # Telegram aggressive default compression for photos
                 max_edge = 1280 
                 width, height = img.size
@@ -359,9 +416,9 @@ class SocialMediaSimulator:
                     img = img.resize((int(width * ratio), int(height * ratio)), Image.Resampling.LANCZOS)
 
                 img.save(output_path, 'JPEG', quality=85)
-                logging.info(f"Saved Image: {output_path}")
+                print(f"Saved Image: {output_path}")
         except Exception as e:
-            logging.error(f"Telegram image processing failed: {e}")
+            print(f"Error: {e}")
 
     def _telegram_process_video(self, input_path, output_path):
 
@@ -376,12 +433,12 @@ class SocialMediaSimulator:
             '-map_metadata', '-1',
             output_path
         ]
-        logging.info(f"Applying standard video compression (Max 720p, {bitrate} bitrate)...")
+        print(f"  [Video] Applying standard compression (Max 720p, {bitrate} bitrate)...")
         try:
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            logging.info(f"Saved Video: {output_path}")
+            print(f"Saved Video: {output_path}")
         except Exception:
-            logging.error("Telegram Video failed.")
+            print(" Telegram Video failed.")
 
     # =========================================================================
     # TIKTOK
@@ -399,7 +456,7 @@ class SocialMediaSimulator:
         output_filename = "TEMPOUT.mp4" if is_video else "TEMPOUT.jpg"
         output_path = os.path.join(output_dir, output_filename)
 
-        logging.info("TikTok Processing")
+        print(f"\n TikTok Processing")
 
         if is_video:
             # Scale to 1080x1920, Pad with black, Aggressive bitrate
@@ -418,7 +475,7 @@ class SocialMediaSimulator:
                 output_path
             ]
             subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            logging.info(f"Transcoded to Vertical. Bitrate changed to 2.5Mbps. Saved to: {output_path}")
+            print(f"Transcoded to Vertical. Bitrate changed to 2.5Mbps. Saved to: {output_path}")
         else:
             try:
                 with Image.open(input_path) as img:
@@ -433,6 +490,6 @@ class SocialMediaSimulator:
                     
                     background.save(output_path, quality=85)
                     
-                    logging.info(f"Padded to 9:16 vertical. Saved to: {output_path}")
+                    print(f"Padded to 9:16 vertical. Saved to: {output_path}")
             except Exception as e:
-                logging.error(f"TikTok image processing failed: {e}")
+                print(f"Error: {e}")
