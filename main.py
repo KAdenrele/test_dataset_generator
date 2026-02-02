@@ -1,12 +1,16 @@
 import os
 from datasets import load_dataset
 from scripts.image_transform_pipeline import run_pipeline, ALL_SIMULATIONS
+from scripts.video_transform_pipeline import run_pipeline as run_video_pipeline, ALL_SIMULATIONS as VIDEO_SIMULATIONS
+import logging
+
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 BASE_DIR = "/data"
 DEST_BASE = os.path.join(BASE_DIR, "data/test_dataset/curated/images")
+VIDEO_DEST_BASE = os.path.join(BASE_DIR, "data/test_dataset/curated/videos")
 
 if __name__ == "__main__":
   # run_pipeline(
@@ -47,4 +51,24 @@ if __name__ == "__main__":
   # )
 
 
-  # logging.info("--- Main process complete. All datasets downloaded and curated. ---")
+ run_video_pipeline(
+        dataset_name="MAVOS",
+        video_directory_path=os.path.join(BASE_DIR, "raw/MAVOS_DD"),
+        destination_directory=os.path.join(VIDEO_DEST_BASE, "MAVOS_DD"),
+        is_huggingface=True,
+        has_subdirectories=False,
+        hf_name="unibuc-cs/MAVOS-DD",
+        is_synthetic=True,
+        simulations_to_run=VIDEO_SIMULATIONS[3:],
+        target_sample_size=2000,
+    )
+ run_video_pipeline(
+        dataset_name="K400",
+        video_directory_path=os.path.join(BASE_DIR, "raw/k400/val"),
+        destination_directory=os.path.join(VIDEO_DEST_BASE, "K400"),
+        is_huggingface=False,
+        has_subdirectories=False,
+        is_synthetic=False,
+        simulations_to_run=VIDEO_SIMULATIONS[3:],
+        target_sample_size=2000,
+    )
