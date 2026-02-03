@@ -1,0 +1,23 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Virtual Environment
+.venv
+venv
+
+# Python cache
+__pycache__/
+*.pyc
+
+# IDE configuration
+.vscode/
+.idea/
+
+# Local data and output directories
+data/
+media_output/
