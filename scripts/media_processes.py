@@ -3,6 +3,7 @@ import hashlib
 import shutil
 import subprocess
 from datetime import datetime
+import logging
 from PIL import Image, ImageCms, ImageOps
 
 class SocialMediaSimulator:
@@ -25,8 +26,8 @@ class SocialMediaSimulator:
             output = subprocess.check_output(cmd).decode("utf-8").strip()
             width, height = map(int, output.split('x'))
             return width, height
-        except Exception as e:
-            print(f"Error: {e}")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            logging.error(f"ffprobe failed to get dimensions for {input_path}: {e}")
             return None, None
 
     # =========================================================================
@@ -61,13 +62,13 @@ class SocialMediaSimulator:
         elif is_image:
             self._facebook_process_image(input_path, output_path)
         else:
-            print("Unsupported media type for Facebook simulation.")
+            logging.warning(f"Unsupported media type for Facebook simulation: {input_path}")
             return "file type not supported"
 
     def _facebook_process_video(self, input_path, output_path):
         width, height = self._get_video_dimensions(input_path)
         if width is None or height is None:
-            print("Could not retrieve video dimensions.")
+            logging.warning(f"Could not retrieve video dimensions for {input_path}. Skipping Facebook processing.")
             return
 
         #Downscaling - Cap at 2048px on the longest edge
@@ -98,14 +99,18 @@ class SocialMediaSimulator:
         ]
 
         try:
-            subprocess.run(cmd, check=True, stderr=subprocess.DEVNULL)
-            print(f"Saved to: {output_path}")
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            logging.info(f"Facebook video process complete for: {output_path}")
+        except FileNotFoundError:
+            logging.error("ffmpeg not found. Please ensure it is installed and in the system's PATH.")
+            raise
         except subprocess.CalledProcessError as e:
-            print(f"Facebook video pipeline failed: {e}")
+            logging.error(f"Facebook video pipeline failed for {input_path}. FFmpeg stderr:\n{e.stderr}")
+            raise
     
     def _facebook_process_image(self, input_path, output_path):
         try:
-            print(f"\n Facebook Processing: {os.path.basename(input_path)} ")
+            logging.info(f"Facebook Processing: {os.path.basename(input_path)}")
             original_image = Image.open(input_path)
             
             # 1. Convert to sRGB
@@ -127,13 +132,13 @@ class SocialMediaSimulator:
                 scale_factor = max_dimension / max(width, height)
                 new_size = (int(width * scale_factor), int(height * scale_factor))
                 working_image = working_image.resize(new_size, Image.Resampling.LANCZOS)
-                print(f"Downscaled to {new_size}")
+                logging.info(f"Downscaled to {new_size}")
 
             working_image.save(output_path, "JPEG", quality=85, optimize=True, subsampling=0)
-            print(f"Saved to: {output_path}")
+            logging.info(f"Saved to: {output_path}")
 
         except Exception as e:
-            print(f"Facebook image pipeline failed: {e}")
+            logging.error(f"Facebook image pipeline failed for {input_path}: {e}")
 
     # =========================================================================
     # INSTAGRAM
@@ -152,7 +157,7 @@ class SocialMediaSimulator:
         output_filename = "TEMPOUT.mp4" if is_video else "TEMPOUT.jpg"
         output_path = os.path.join(output_dir, output_filename)
 
-        print(f"\n Instagram Processing ({post_type.upper()})")
+        logging.info(f"Instagram Processing ({post_type.upper()}) for {input_path}")
 
         if not is_video:
             try:
@@ -181,9 +186,9 @@ class SocialMediaSimulator:
                         img = ImageOps.fit(img, (target_width, target_height), method=Image.Resampling.LANCZOS)
 
                     img.save(output_path, "JPEG", quality=80, optimize=True, subsampling=0)
-                    print(f"Saved Image: {output_path}")
+                    logging.info(f"Saved Instagram Image: {output_path}")
             except Exception as e:
-                print(f"IG pipeline failed: {e}")
+                logging.error(f"Instagram image pipeline failed for {input_path}: {e}")
 
         else:
             # Video Logic (FFmpeg)
@@ -208,11 +213,14 @@ class SocialMediaSimulator:
                 output_path
             ]
             try:
-                subprocess.run(cmd, check=True, stderr=subprocess.DEVNULL)
-                print(f"Saved Video: {output_path}")
-            except Exception:
-                print("IG pipeline failed.")
-
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
+                logging.info(f"Saved Instagram Video: {output_path}")
+            except FileNotFoundError:
+                logging.error("ffmpeg not found. Please ensure it is installed and in the system's PATH.")
+                raise
+            except subprocess.CalledProcessError as e:
+                logging.error(f"Instagram video pipeline failed for {input_path}. FFmpeg stderr:\n{e.stderr}")
+                raise
 
     # =========================================================================
     # WHATSAPP
@@ -242,11 +250,11 @@ class SocialMediaSimulator:
              output_filename = "TEMPOUT" + ext
         
         output_path = os.path.join(output_dir, output_filename)
-        print(f"\n WhatsApp Processing ({upload_type.upper()}/{quality_mode.upper()})")
+        logging.info(f"WhatsApp Processing ({upload_type.upper()}/{quality_mode.upper()}) for {input_path}")
 
         if upload_type == 'document':
             shutil.copy2(input_path, output_path)
-            print(f"Document Copy complete.")
+            logging.info(f"WhatsApp document copy complete for {input_path}")
             return
 
         if is_image:
@@ -267,9 +275,9 @@ class SocialMediaSimulator:
                 
                 jpg_quality = 80 if quality_mode == 'high' else 70
                 img.save(output_path, 'JPEG', quality=jpg_quality, optimize=True)
-                print(f"Saved Image: {output_path}")
+                logging.info(f"Saved WhatsApp Image: {output_path}")
         except Exception as e:
-            print(f" WA Image failed: {e}")
+            logging.error(f"WhatsApp Image pipeline failed for {input_path}: {e}")
 
     def _whatsapp_process_video(self, input_path, output_path, quality_mode):
         scale = "scale=-2:720" if quality_mode == 'high' else "scale=-2:480"
@@ -283,11 +291,14 @@ class SocialMediaSimulator:
             output_path
         ]
         try:
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print(f"Saved Video: {output_path}")
-        except Exception:
-            print(" WA Video failed.")
-
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            logging.info(f"Saved WhatsApp Video: {output_path}")
+        except FileNotFoundError:
+            logging.error("ffmpeg not found. Please ensure it is installed and in the system's PATH.")
+            raise
+        except subprocess.CalledProcessError as e:
+            logging.error(f"WhatsApp video pipeline failed for {input_path}. FFmpeg stderr:\n{e.stderr}")
+            raise
     # =========================================================================
     # SIGNAL
     # =========================================================================
@@ -313,19 +324,19 @@ class SocialMediaSimulator:
 
         output_path = os.path.join(output_dir, output_filename)
 
-        print(f"\n Signal Processing (Quality: {quality_setting.upper()})")
+        logging.info(f"Signal Processing (Quality: {quality_setting.upper()}, Document: {as_document}) for {input_path}")
         
         if as_document:
             shutil.copy2(input_path, output_path)
-            print(f"Document Copy complete.")
+            logging.info(f"Signal document copy complete for {input_path}")
             return
 
         if is_image:
             self._signal_process_image(input_path, output_path, quality_setting)
         elif is_video:
-            self._signal_process_video(input_path, output_path)
+            self._signal_process_video(input_path, output_path, quality_setting)
         else:
-            print("Unsupported media type for Signal.")
+            logging.warning(f"Unsupported media type for Signal: {input_path}")
 
     def _signal_process_image(self, input_path, output_path, quality_setting):
         try:
@@ -340,15 +351,14 @@ class SocialMediaSimulator:
                 
                 # Signal specifically strips metadata in media mode
                 img.save(output_path, 'JPEG', quality=80)
-                print(f"Metadata stripped. Resized to {img.size}. Saved to: {output_path}")
+                logging.info(f"Signal metadata stripped. Resized to {img.size}. Saved to: {output_path}")
         except Exception as e:
-            print(f"Error: {e}")
+            logging.error(f"Signal image pipeline failed for {input_path}: {e}")
 
-    def _signal_process_video(self, input_path, output_path):
+    def _signal_process_video(self, input_path, output_path, quality_setting):
+        scale = "scale=-2:1080" if quality_setting == 'high' else "scale=-2:720"
+        bitrate = "2.5M" if quality_setting == 'high' else "1.5M"
 
-        scale = "scale=-2:640" 
-        bitrate = "1.5M"       
-        
         cmd = [
             'ffmpeg', '-y', '-i', input_path,
             '-c:v', 'libx264', '-c:a', 'aac',
@@ -357,13 +367,16 @@ class SocialMediaSimulator:
             '-map_metadata', '-1', 
             output_path
         ]
-        print(f"  [Video] Applying aggressive compression (Max 640p, {bitrate} bitrate)...")
+        logging.info(f"  [Video] Applying Signal compression (Max {scale.split(':')[-1]}p, {bitrate} bitrate)...")
         try:
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print(f"Saved Video: {output_path}")
-        except Exception:
-            print(" Signal Video failed.")
-
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            logging.info(f"Saved Signal Video: {output_path}")
+        except FileNotFoundError:
+            logging.error("ffmpeg not found. Please ensure it is installed and in the system's PATH.")
+            raise
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Signal video pipeline failed for {input_path}. FFmpeg stderr:\n{e.stderr}")
+            raise
     # =========================================================================
     # TELEGRAM
     # =========================================================================
@@ -389,11 +402,11 @@ class SocialMediaSimulator:
 
         output_path = os.path.join(output_dir, output_filename)
 
-        print(f"\n Telegram Processing (Document: {as_document})")
+        logging.info(f"Telegram Processing (Document: {as_document}) for {input_path}")
 
         if as_document:
             shutil.copy2(input_path, output_path)
-            print(f"Original quality preserved. Saved to: {output_path}")
+            logging.info(f"Telegram document copy complete. Original quality preserved. Saved to: {output_path}")
             return
 
         if is_image:
@@ -416,9 +429,9 @@ class SocialMediaSimulator:
                     img = img.resize((int(width * ratio), int(height * ratio)), Image.Resampling.LANCZOS)
 
                 img.save(output_path, 'JPEG', quality=85)
-                print(f"Saved Image: {output_path}")
+                logging.info(f"Saved Telegram Image: {output_path}")
         except Exception as e:
-            print(f"Error: {e}")
+            logging.error(f"Telegram image pipeline failed for {input_path}: {e}")
 
     def _telegram_process_video(self, input_path, output_path):
 
@@ -433,13 +446,16 @@ class SocialMediaSimulator:
             '-map_metadata', '-1',
             output_path
         ]
-        print(f"  [Video] Applying standard compression (Max 720p, {bitrate} bitrate)...")
+        logging.info(f"  [Video] Applying Telegram compression (Max 720p, {bitrate} bitrate)...")
         try:
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print(f"Saved Video: {output_path}")
-        except Exception:
-            print(" Telegram Video failed.")
-
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            logging.info(f"Saved Telegram Video: {output_path}")
+        except FileNotFoundError:
+            logging.error("ffmpeg not found. Please ensure it is installed and in the system's PATH.")
+            raise
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Telegram video pipeline failed for {input_path}. FFmpeg stderr:\n{e.stderr}")
+            raise
     # =========================================================================
     # TIKTOK
     # =========================================================================
@@ -456,7 +472,7 @@ class SocialMediaSimulator:
         output_filename = "TEMPOUT.mp4" if is_video else "TEMPOUT.jpg"
         output_path = os.path.join(output_dir, output_filename)
 
-        print(f"\n TikTok Processing")
+        logging.info(f"TikTok Processing for {input_path}")
 
         if is_video:
             # Scale to 1080x1920, Pad with black, Aggressive bitrate
@@ -474,8 +490,15 @@ class SocialMediaSimulator:
                 '-pix_fmt', 'yuv420p', '-map_metadata', '-1',
                 output_path
             ]
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print(f"Transcoded to Vertical. Bitrate changed to 2.5Mbps. Saved to: {output_path}")
+            try:
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
+                logging.info(f"TikTok transcoding complete. Saved to: {output_path}")
+            except FileNotFoundError:
+                logging.error("ffmpeg not found. Please ensure it is installed and in the system's PATH.")
+                raise
+            except subprocess.CalledProcessError as e:
+                logging.error(f"TikTok video pipeline failed for {input_path}. FFmpeg stderr:\n{e.stderr}")
+                raise
         else:
             try:
                 with Image.open(input_path) as img:
@@ -490,6 +513,6 @@ class SocialMediaSimulator:
                     
                     background.save(output_path, quality=85)
                     
-                    print(f"Padded to 9:16 vertical. Saved to: {output_path}")
+                    logging.info(f"TikTok image padded to 9:16 vertical. Saved to: {output_path}")
             except Exception as e:
-                print(f"Error: {e}")
+                logging.error(f"TikTok image pipeline failed for {input_path}: {e}")
