@@ -9,8 +9,8 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 BASE_DIR = "/data"
-DEST_BASE = os.path.join(BASE_DIR, "data/test_dataset/curated/images")
-VIDEO_DEST_BASE = os.path.join(BASE_DIR, "data/test_dataset/curated/videos")
+DEST_BASE = os.path.join(BASE_DIR, "curated/images")
+VIDEO_DEST_BASE = os.path.join(BASE_DIR, "curated/videos")
 
 if __name__ == "__main__":
   # run_pipeline(
